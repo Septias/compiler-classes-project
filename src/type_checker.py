@@ -97,6 +97,14 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             ctx[x] = TInt()
             rh = type_check_stmts(ctx, handler)
             return rb and rh
+        # TODO: check if this is correct
+        case SClass(name, fields):
+            if name in ctx:
+                raise TypeError(f"the name {name} is already in use for a class or function")
+            # is this enough for the class definition -> constructor context?
+            ctx[name] = TClass(name, fields)
+            # return value should only be True if expression type is correct?
+            return False
 
 # infer type of an expression        
 def type_check_expr(ctx: TCtx, e: Expr) -> Type:
@@ -185,16 +193,36 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
         case ECall(f, es):
             fty = type_check_expr(ctx, f)
             match fty:
+                # function call
                 case TCallable(arg_tys, res_ty):
                     if len(es) != len(arg_tys):
                         raise TypeError(f"Calling function with wrong number of arguments {e}")
                     for (e, ty) in zip(es, arg_tys):
                         check_expr(ctx, e, ty)
                     return res_ty
+                # constructor call
+                case TClass(name, fields):
+                    if len(es) != len(fields):
+                        raise TypeError(f"Constructor of Class {name} called with wrong number of arguments")
+                    field_tys = [attr[1] for attr in fields]
+                    for (e, ty) in zip(es, field_tys):
+                        check_expr(ctx, e, ty)
+                    return fty
                 case t:
                     raise TypeError(f"Calling non-function type {t}")
         case ELambda():
             raise TypeError(f"Cannot synthesize type of {pretty_expr(e)}")
+        case EField(expr, fieldname):
+            exprtype = type_check_expr(ctx, expr)
+            e.type = exprtype
+            match exprtype:
+                case TClass(classtype, fields):
+                    for (name, fieldtype) in fields:
+                        if name == fieldname:
+                            return fieldtype
+                    raise NameError(f"Cannot find a field with the name {fieldname} in class {classtype}")
+                case t:
+                    raise TypeError(f"Cannot access field of non-class type {t}")
         # case EArity(e):
         #     te = type_check_expr(ctx, e)
         #     match te:

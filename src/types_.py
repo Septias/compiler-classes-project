@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from util.immutable_list import IList
+from identifier import Id
 
 # Type Syntax
 
-type Type = TBool | TInt | TNone | TTuple | TCallable
+type Type = TBool | TInt | TNone | TTuple | TCallable | TClass
 
 @dataclass(frozen=True)
 class TBool:
@@ -25,6 +26,11 @@ class TTuple:
 class TCallable:
     param_tys: IList[Type]
     ret_ty: Type
+
+@dataclass(frozen=True)
+class TClass:
+    name: Id
+    fields: IList[tuple[Id, Type]]
 
 # Pretty Printing
 

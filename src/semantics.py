@@ -22,7 +22,7 @@ def simulate_over_and_underflow(i: int) -> int:
 
 # Values
 
-type Value = int | bool | NoneType | VTuple | VFunction
+type Value = int | bool | NoneType | VTuple | VFunction | VClass | VObject
 
 # Value Environment
 
@@ -57,6 +57,16 @@ class VFunction:
 class UserException(Exception):
     value: Value
 
+@dataclass(frozen=True)
+class VClass:
+    name: Id
+    fieldnames: IList[Id]
+
+@dataclass
+class VObject:
+    classref: VClass
+    fields: dict[Id, Value]
+
 # Evaluation
 
 def apply_fun(f: Value, xs: tuple[Value, ...]) -> Optional[Value]:
@@ -64,6 +74,13 @@ def apply_fun(f: Value, xs: tuple[Value, ...]) -> Optional[Value]:
         case VFunction(_, parms, body, env):
             fenv = RTEnv(dict(zip(parms, xs)), env)
             return eval_stmts(fenv, body)
+        case VClass(_, fieldnames):
+            if len(xs) != len(fieldnames):
+                raise Exception(f"Class expected {len(fieldnames)} arguments for construction but got {len(xs)}")
+            res = {}
+            for field, val in zip(fieldnames, xs):
+                res[field] = val
+            return VObject(f, res)
         case _:
             raise Exception('apply_fun: unexpected value ' + repr(f))
 
@@ -163,6 +180,14 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
                     return v
         case ELambda(xs, expr):
             return VFunction(Id("lambda"), xs, ilist(SReturn(expr)), env)
+        case EField(e, name):
+            obj = eval_expr(env, e)
+            match obj:
+                case VObject(_, fields):
+                    return fields[name]
+                case _:
+                    raise Exception("Tried field access on non-object")
+
         # case EArity(expr):
         #     v = eval_expr(env, expr)
         #     match v:
@@ -210,6 +235,15 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                             r = eval_stmts(env, handler)
                             if r is not None:
                                 return r
+            case SClass(name, fields):
+                fieldIds = IList([x[0] for x in fields])
+                cv = VClass(name, fieldIds)
+                try:
+                    lookup(env, name)
+                except Exception:
+                    assign(env, name, cv)
+                else:
+                    raise Exception(f"interpreter found multiple definotons of class {name}")    
 
 def eval_decls(env: RTEnv, defs: IList[Decl]):
     for d in defs:

@@ -119,6 +119,20 @@ def map_node(node: ast.AST) -> Any:
             return SRaise(map_node(arg))
         case ast.Try(body, [ast.ExceptHandler(ast.Name("Exception"), x, ex_body)], [], []) if x is not None:
             return STry(map_nodes(body), Id(x), map_nodes(ex_body))
+        # map classes
+        case ast.ClassDef(name, _, _, body, _):
+            params = []
+            for classop in body:
+                match classop:
+                    # attribute of class is being defined
+                    case ast.AnnAssign(ast.Name(id, _), annot, _, _):
+                        ty = map_type_node(annot)
+                        params.append((Id(id), ty))
+                    case ast.FunctionDef():
+                        raise UnsupportedFeature(node)
+            return SClass(Id(name), IList(params))
+        case ast.Attribute(e, id):
+            return EField(map_node(e), Id(id))
         case _:
             raise UnsupportedFeature(node)
 

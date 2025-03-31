@@ -19,7 +19,7 @@ type Op2 = Literal["+", "-", "==", "!=", "<=", "<", ">", ">=", "and", "or", "is"
 
 type Expr = EConst | EVar | EOp1 | EOp2 | EInput | EIf \
           | ETuple | ETupleAccess | ETupleLen \
-          | ECall | ELambda
+          | ECall | ELambda | EField
 
 @dataclass(frozen=True)
 class EConst:
@@ -73,9 +73,14 @@ class ELambda:
     params: IList[Id]
     body: Expr
 
+@dataclass # not frozen, as we add the type of e to it in the typechecker!
+class EField:
+    e: Expr
+    name: Id
+
 # Statements
 
-type Stmt = SExpr | SPrint | SAssign | SIf | SWhile | SReturn | SRaise | STry
+type Stmt = SExpr | SPrint | SAssign | SIf | SWhile | SReturn | SRaise | STry | SClass
 
 @dataclass(frozen=True)
 class SExpr:
@@ -115,6 +120,11 @@ class STry:
     e_try: IList[Stmt]
     e_var: Id
     e_except: IList[Stmt]
+
+@dataclass(frozen=True)
+class SClass:
+    name: Id
+    fields: IList[tuple[Id, Type]]
 
 # Declarations
 
@@ -180,6 +190,9 @@ def pretty_stmt(s: Stmt) -> str:
                     f"{indent(pretty_stmts(body))}\n" \
                     f"except {x}:\n" \
                     f"{indent(pretty_stmts(s_except))}"
+        case SClass(name, fields):
+            field_str = "\n\t".join(f"{x}: {pretty_type(t)}" for (x, t) in fields)
+            return f"{name}:\n{indent(field_str)}"
 
 def pretty_expr(e: Expr) -> str:
     match e:
@@ -206,6 +219,8 @@ def pretty_expr(e: Expr) -> str:
             params_str = ", ".join(str(x) for x in params)
             body_str = pretty_expr(body)
             return f"lambda {params_str}: {body_str}"
+        case EField(e, name):
+            return f"{pretty_expr(e)} {name}"
 
 def pretty_anything(x: Program | Decl | Stmt | Expr) -> str:
     try:
