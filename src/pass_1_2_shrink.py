@@ -6,11 +6,16 @@ from util.immutable_list import *
 
 def shrink(p: src.Program) -> tgt.Program:
     new_decls = IList([shrink_decl(d) for d in p.decls])
+    # temp var to store the generated class constructor functions
+    # TODO: how do I make this nice?
+    global class_constructors
+    class_constructors = []
 
     # Add the top-level statements to a function called `program_main`
     program_main_body = shrink_stmts(p.main_body)
     program_main = tgt.DFun(tgt.Id("program_main"), ilist(), program_main_body)
-
+    new_decls = new_decls + IList(class_constructors)
+    print(new_decls)
     # Create the real main function which calls the `program_main` in a try-block
     # to report exceptions which otherwise would be unhandled.
     exc_id = Id.fresh("x")
@@ -68,6 +73,15 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
             body = shrink_stmts(body)
             handler = shrink_stmts(handler)
             return tgt.STry(body, x, handler)
+        # class statement - generate class object and constructor
+        case src.SClass(name, fields):
+            class_obj = tgt.ETuple(ilist())
+            ids = [field[0] for field in fields]
+            constructor_body = ilist(tgt.SReturn(tgt.ETuple(IList([class_obj] + [tgt.EVar(id) for id in ids]))))
+            constructor = tgt.DFun(name, ids, constructor_body)
+            class_constructors.append(constructor)
+            return tgt.SExpr(class_obj)
+
 
 def shrink_expr(e: src.Expr) -> tgt.Expr:
     match e:
@@ -113,3 +127,11 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         case src.ELambda(params, body):
             return tgt.ELambda(params, shrink_expr(body))
         # END
+        case src.EField(expr, name):
+            class_type = e.type
+            i = 0
+            for field_name, field_type in class_type.fields:
+                if field_name == name:
+                    break
+                i += 1
+            return tgt.ETupleAccess(shrink_expr(expr), i + 1)

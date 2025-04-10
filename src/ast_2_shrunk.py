@@ -200,3 +200,5 @@ def pretty_expr(e: Expr) -> str:
             params_str = ", ".join(str(x) for x in params)
             body_str = pretty_expr(body)
             return f"lambda {params_str}: {body_str}"
+        case _:
+            return f"found unknown: {e}"
