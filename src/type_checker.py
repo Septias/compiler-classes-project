@@ -98,11 +98,25 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             rh = type_check_stmts(ctx, handler)
             return rb and rh
         # TODO: check if this is correct
-        case SClass(name, fields):
+        case SClass(name, fields, methods):
             if name in ctx:
                 raise TypeError(f"the name {name} is already in use for a class or function")
             # is this enough for the class definition -> constructor context?
-            ctx[name] = TClass(name, fields)
+            fieldnames = []
+            for fieldname, _ in fields:
+                if fieldname in fieldnames:
+                    raise NameError(f"multiple use of {fieldname} for name of field in class {name}")
+                fieldnames.append(fieldname)
+            # type check 
+            methodnames = []
+            for method in methods:
+                if method.name in methodnames:
+                    raise NameError(f"multiple use of {method.name} for name of method in class {name}")
+                if method.params[0] != (Id("self"), None):
+                    raise TypeError(f"first argument of method {method.name} is not self")
+                methodnames.append(method.name)
+            methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
+            ctx[name] = TClass(name, fields, IList(methods_types))
             # return value should only be True if expression type is correct?
             return False
 
@@ -216,13 +230,34 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
             exprtype = type_check_expr(ctx, expr)
             e.type = exprtype
             match exprtype:
-                case TClass(classtype, fields):
+                case TClass(classtype, fields, _):
                     for (name, fieldtype) in fields:
                         if name == fieldname:
                             return fieldtype
                     raise NameError(f"Cannot find a field with the name {fieldname} in class {classtype}")
                 case t:
                     raise TypeError(f"Cannot access field of non-class type {t}")
+        # TODO!
+        case EMethod(expr, name, args):
+            exprtype = type_check_expr(ctx, expr)
+            match exprtype:
+                case TClass(classname, fields, methods):
+                    e.type = exprtype
+                    for mname, mtype in methods:
+                        if mname == name:
+                            m_arg_types = mtype.param_tys[1:]
+                            if len(args) != len(m_arg_types):
+                                raise TypeError(f"{classname}.{name} expected {len(m_arg_types)} arguments but got {len(args)}")
+                            # check argument types
+                            for i, arg in enumerate(args):
+                                arg_ty = type_check_expr(ctx, arg)
+                                if arg_ty != m_arg_types[i]:
+                                    raise TypeError(f"expected type {m_arg_types[i]} but got type {arg_ty} in method {classname}.{name}")
+                            return mtype.ret_ty
+                    else:
+                        raise NameError(f"could not find method {name}")
+                case _:
+                    raise TypeError(f"expected class type but got {exprtype}")
         # case EArity(e):
         #     te = type_check_expr(ctx, e)
         #     match te:

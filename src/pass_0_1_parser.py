@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 from typing import Any, Sequence
 import ast
+from types_ import TCallable
 
 from ast_1_python import *
 from identifier import Id
 from util.immutable_list import IList, ilist
 
-# as classes baheve like types and types are parsed statically, we need to keep track of all defined classes and their fields
-type Cctx = dict[Id, IList[tuple[Id, Type]]]
+# as classes baheve like types and types are parsed statically, we need to keep track of all defined classes, their fields and methods
+type Cctx = dict[Id, tuple[IList[tuple[Id, Type]], IList[tuple[Id, TCallable]]]]
 
 @dataclass(frozen=True)
 class ParseError(Exception):
@@ -82,8 +83,14 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
             return EIf(map_node(test, ctx), map_node(body, ctx), map_node(orelse, ctx))
         case ast.While(test, body, []):
             return SWhile(map_node(test, ctx), map_nodes(body, ctx))
-        case ast.Assign([ast.Name(x)], value, _):
-            return SAssign(Id(x), None, map_node(value, ctx))
+        case ast.Assign(y, value, _):
+            match y:
+                case [ast.Name(x)] if x != "self":
+                    return SAssign(Id(x), None, map_node(value, ctx))
+                case [ast.Attribute(e, id)]:
+                    return SAssign(EField(map_node(e, ctx), Id(id)), None, map_node(value, ctx))
+                case _:
+                    raise UnsupportedFeature(node)
         case ast.AnnAssign(ast.Name(x), ty, value) if value is not None:
             return SAssign(Id(x), map_type_node(ty, ctx), map_node(value, ctx))
         # case ast.Assign([ast.Subscript(e, ast.Constant(int(i)), _)], value, _):
@@ -123,7 +130,8 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
         case ast.Lambda(args, body):
             params = IList([Id(arg.arg) for arg in args.args])
             return ELambda(params, map_node(body, ctx))
-        case ast.Call(e, args, keywords) if len(keywords) == 0:
+        # narrow this to take only functions
+        case ast.Call(e, args, keywords) if len(keywords) == 0 and type(e) is ast.Name:
             return ECall(map_node(e, ctx), map_nodes(args, ctx))
         case ast.Raise(ast.Call(_, [arg])):
             return SRaise(map_node(arg, ctx))
@@ -132,18 +140,45 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
         # map classes
         case ast.ClassDef(name, _, _, body, _):
             params = []
+            methods: list[DFun] = []
             for classop in body:
                 match classop:
                     # attribute of class is being defined
                     case ast.AnnAssign(ast.Name(id, _), annot, _, _):
                         ty = map_type_node(annot, ctx)
                         params.append((Id(id), ty))
-                    case ast.FunctionDef():
-                        raise UnsupportedFeature(node)
-            ctx[Id(name)] = IList(params)
-            return SClass(Id(name), IList(params))
+                    case ast.FunctionDef(mname, margs, mbody, _, mreturns, _, _):
+                        # we need to handle the self here
+                        method_params = []
+                        for arg in margs.args:
+                            if arg.annotation is None:
+                                # if arg is self, we do not need a type annotation
+                                if arg.arg != "self":
+                                    raise UnsupportedFeature(classop)
+                                else:
+                                    # we annotate self with None as the type is always clear
+                                    # other annotations of self are ignored!
+                                    method_params.append((Id("self"), None))
+                            else:
+                                id = Id(arg.arg)
+                                ty = map_type_node(arg.annotation, ctx)
+                                method_params.append((id, ty))
+                        if mreturns is None:
+                            ret_ty = TNone()
+                        else:
+                            ret_ty = map_type_node(mreturns, ctx)
+                        methods.append(DFun(Id(mname), IList(method_params), ret_ty, map_nodes(mbody, ctx)))
+                    case _:
+                        raise UnsupportedFeature(classop)
+            # TODO: change to TCallable
+            methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
+            ctx[Id(name)] = (IList(params), IList(methods_types))
+            return SClass(Id(name), IList(params), IList(methods))
         case ast.Attribute(e, id):
             return EField(map_node(e, ctx), Id(id))
+        # this is for method calls
+        case ast.Call(e, args, keywords) if len(keywords) == 0 and type(e) is ast.Attribute:
+            return EMethod(map_node(e.value, ctx), Id(e.attr), map_nodes(args, ctx))
         case _:
             raise UnsupportedFeature(node)
 
@@ -168,9 +203,11 @@ def map_type_node(node: ast.AST, ctx: Cctx) -> Type:
             return TCallable(map_type_nodes(params, ctx), map_type_node(ret, ctx))
         case ast.Name(classname, _):
             if Id(classname) in ctx:
-                return TClass(Id(classname), ctx[Id(classname)])
+                return TClass(Id(classname), ctx[Id(classname)][0], ctx[Id(classname)][1])
             else:
                 raise UnknownTypeError(classname)
+        case ast.Constant(None):
+            return TNone()
         case _:
             raise UnsupportedFeature(node)
 

@@ -31,6 +31,7 @@ class TCallable:
 class TClass:
     name: Id
     fields: IList[tuple[Id, Type]]
+    methods: IList[tuple[Id, TCallable]]
 
 # Pretty Printing
 

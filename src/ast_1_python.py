@@ -78,6 +78,12 @@ class EField:
     e: Expr
     name: Id
 
+@dataclass
+class EMethod:
+    e: Expr
+    name: Id
+    args: IList[Expr]
+
 # Statements
 
 type Stmt = SExpr | SPrint | SAssign | SIf | SWhile | SReturn | SRaise | STry | SClass
@@ -92,7 +98,7 @@ class SPrint:
 
 @dataclass(frozen=True)
 class SAssign:
-    lhs: Id
+    lhs: Id | EField
     ty: Optional[Type]
     rhs: Expr
 
@@ -121,11 +127,6 @@ class STry:
     e_var: Id
     e_except: IList[Stmt]
 
-@dataclass(frozen=True)
-class SClass:
-    name: Id
-    fields: IList[tuple[Id, Type]]
-
 # Declarations
 
 type Decl = DFun
@@ -144,6 +145,14 @@ class DFun:
 class Program:
     decls: IList[Decl]
     main_body: IList[Stmt]
+
+# Class statement (needs to go after DFun definition)
+
+@dataclass(frozen=True)
+class SClass:
+    name: Id
+    fields: IList[tuple[Id, Type]]
+    methods: IList[DFun]
 
 # Pretty Printing
 
@@ -190,9 +199,10 @@ def pretty_stmt(s: Stmt) -> str:
                     f"{indent(pretty_stmts(body))}\n" \
                     f"except {x}:\n" \
                     f"{indent(pretty_stmts(s_except))}"
-        case SClass(name, fields):
-            field_str = "\n\t".join(f"{x}: {pretty_type(t)}" for (x, t) in fields)
-            return f"{name}:\n{indent(field_str)}"
+        # TODO: add methods
+        case SClass(name, fields, methods):
+            field_str = "\n".join(f"{x}: {pretty_type(t)}" for (x, t) in fields)
+            return f"{name}:\n{indent(field_str)}\n\n" + indent("\n\n".join(pretty_decl(m) for m in methods)) + "\n"
 
 def pretty_expr(e: Expr) -> str:
     match e:
@@ -220,7 +230,9 @@ def pretty_expr(e: Expr) -> str:
             body_str = pretty_expr(body)
             return f"lambda {params_str}: {body_str}"
         case EField(e, name):
-            return f"{pretty_expr(e)} {name}"
+            return f"{pretty_expr(e)}.{name}"
+        case EMethod(e, name, args):
+            return f"{pretty_expr(e)}.{name}(" + ", ".join(pretty_expr(a) for a in args) + ")"
 
 def pretty_anything(x: Program | Decl | Stmt | Expr) -> str:
     try:

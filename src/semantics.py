@@ -61,6 +61,7 @@ class UserException(Exception):
 class VClass:
     name: Id
     fieldnames: IList[Id]
+    methods: IList[tuple[Id, Value]]
 
 @dataclass
 class VObject:
@@ -142,7 +143,7 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
                         case _:
                             raise Exception("Impossible!")
                 case _:
-                    raise Exception("Binary operator not allowed on these operands.")
+                    raise Exception(f"Binary operator not allowed on these operands: {v1}, {v2}")
         case EIf(test, body, orelse):
             v1 = eval_expr(env, test)
             if v1:
@@ -186,7 +187,28 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
                 case VObject(_, fields):
                     return fields[name]
                 case _:
-                    raise Exception("Tried field access on non-object")
+                    raise Exception(f"Tried field access on non-object {obj}")
+        # to interpret method calls
+        # TODO: we need to eval the args before passing, as apply_fun expects a Value
+        case EMethod(e, name, args):
+            obj = eval_expr(env, e)
+            match obj:
+                case VObject(classref, fields):
+                    for methodname, methodval in classref.methods:
+                        if name == methodname:
+                            match methodval:
+                                case VFunction():
+                                    evals = []
+                                    evals.append(obj)
+                                    for arg in args:
+                                        evals.append(eval_expr(env, arg))
+                                    args = tuple(evals)
+                                    return apply_fun(methodval, args)
+                                case _:
+                                    raise Exception("method is not callable")
+                    raise Exception(f"Could not find the method {name} in class {classref.name}")
+                case _:
+                    raise Exception("Method Call on non-class object")
 
         # case EArity(expr):
         #     v = eval_expr(env, expr)
@@ -204,7 +226,19 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
             case SPrint(e):
                 print(eval_expr(env, e))
             case SAssign(x, _, e):
-                assign(env, x, eval_expr(env, e))
+                match x:
+                    case Id():
+                        assign(env, x, eval_expr(env, e))
+                    case EField(fieldexpr, name):
+                        obj = eval_expr(env, fieldexpr)
+                        res = eval_expr(env, e)
+                        match obj:
+                            case VObject(classref, fields):
+                                if name not in fields.keys():
+                                    raise Exception(f"class {classref.name} has no field {name}")
+                                fields[name] = res
+                            case _:
+                                raise Exception(f"{obj} is not a class object")
             case SIf(test, body, orelse):
                 tv = eval_expr(env, test)
                 match eval_stmts(env, body) if tv else eval_stmts(env, orelse):
@@ -235,9 +269,13 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                             r = eval_stmts(env, handler)
                             if r is not None:
                                 return r
-            case SClass(name, fields):
+            case SClass(name, fields, methods):
                 fieldIds = IList([x[0] for x in fields])
-                cv = VClass(name, fieldIds)
+                vmethods = []
+                for method in methods:
+                    vfun = VFunction(method.name, IList([m[0] for m in method.params]), method.body, env)
+                    vmethods.append((method.name, vfun))
+                cv = VClass(name, fieldIds, IList(vmethods))
                 try:
                     lookup(env, name)
                 except Exception:
