@@ -15,7 +15,6 @@ def shrink(p: src.Program) -> tgt.Program:
     program_main_body = shrink_stmts(p.main_body)
     program_main = tgt.DFun(tgt.Id("program_main"), ilist(), program_main_body)
     new_decls = new_decls + IList(class_constructors)
-    print(new_decls)
     # Create the real main function which calls the `program_main` in a try-block
     # to report exceptions which otherwise would be unhandled.
     exc_id = Id.fresh("x")
@@ -74,7 +73,9 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
             handler = shrink_stmts(handler)
             return tgt.STry(body, x, handler)
         # class statement - generate class object and constructor
-        case src.SClass(name, fields):
+        case src.SClass(name, fields, methods):
+            # TODO: get closures into the class object
+            
             class_obj = tgt.ETuple(ilist())
             ids = [field[0] for field in fields]
             constructor_body = ilist(tgt.SReturn(tgt.ETuple(IList([class_obj] + [tgt.EVar(id) for id in ids]))))

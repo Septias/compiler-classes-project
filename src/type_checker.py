@@ -59,20 +59,31 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             check_type_equal(te, TInt(), e)
             return False
         case SAssign(x, t, e):
-            if t is None:
-                te = type_check_expr(ctx, e)
-                if x in ctx:
-                    check_type_equal(te, ctx[x], s)
-                else:
-                    ctx[x] = te
-                return False
-            else:
-                if x in ctx:
-                    check_type_equal(t, ctx[x], s)
-                else:
-                    ctx[x] = t
-                check_expr(ctx, e, t)
-                return False
+            te = type_check_expr(ctx, e)
+            match x:
+                case EField(e, fieldname):
+                    ty = type_check_expr(ctx, e)
+                    match ty:
+                        case TClass(classname, fields, methods):
+                            ...
+                        case _:
+                            raise TypeError(f"")
+                    ...
+                    return False
+                case Id(_):
+                    if t is None:
+                        if x in ctx:
+                            check_type_equal(te, ctx[x], s)
+                        else:
+                            ctx[x] = te
+                        return False
+                    else:
+                        if x in ctx:
+                            check_type_equal(t, ctx[x], s)
+                        else:
+                            ctx[x] = t
+                        check_expr(ctx, e, t)
+                        return False
         case SIf(test, body, orelse):
             ttest = type_check_expr(ctx, test)
             check_type_equal(ttest, TBool(), test)
@@ -107,18 +118,102 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                 if fieldname in fieldnames:
                     raise NameError(f"multiple use of {fieldname} for name of field in class {name}")
                 fieldnames.append(fieldname)
-            # type check 
+            # type check method definitions
             methodnames = []
             for method in methods:
                 if method.name in methodnames:
                     raise NameError(f"multiple use of {method.name} for name of method in class {name}")
-                if method.params[0] != (Id("self"), None):
-                    raise TypeError(f"first argument of method {method.name} is not self")
+                match method.params[0]:
+                    case (Id("self"), TClass(Id(iname), _, _)):
+                        class_name = name.name
+                        if iname != class_name:
+                            raise NameError(f"type not accertainable: {iname}, {name}")
+                        pass
+                    case _:
+                        raise TypeError(f"first argument of method {method.name} is not self")     
+                # TODO: type check methods
                 methodnames.append(method.name)
             methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
-            ctx[name] = TClass(name, fields, IList(methods_types))
+            class_type = TClass(name, fields, IList(methods_types))
+            ctx[name] = class_type
+            # go over all methods again and annotate the selfs
+            for method in methods:
+                method.params[0][1].fields = class_type.fields
+                method.params[0][1].methods = class_type.methods
+                for stmt in method.body:
+                    type_annotate_method_stmt(stmt, class_type)
+                type_check_def(ctx, method)
             # return value should only be True if expression type is correct?
             return False
+
+# these have the job to annotate the TClass to all occurances of self in methods
+def type_annotate_method_stmt(stmt: Stmt, class_type: TClass):
+    match stmt:
+        case SExpr(expr):
+            type_annotate_method_expr(expr, class_type)
+        case SPrint(expr):
+            type_annotate_method_expr(expr, class_type)
+        case SAssign(lhs, _, rhs):
+            match lhs:
+                case EField(_):
+                    type_annotate_method_expr(lhs, class_type)
+            type_annotate_method_expr(rhs, class_type)
+        case SIf(test, body, orelse):
+            type_annotate_method_expr(test, class_type)
+            for s in body:
+                type_annotate_method_stmt(s, class_type)
+            for o in orelse:
+                type_annotate_method_stmt(o, class_type)
+        case SWhile(test, body):
+            for s in body:
+                type_annotate_method_stmt(s, class_type)
+            type_annotate_method_expr(test, class_type)
+        case SReturn(expr):
+            type_annotate_method_expr(expr, class_type)
+        case SRaise(expr):
+            type_annotate_method_expr(expr, class_type)
+        case STry(stry, _, sexcept):
+            for s in stry:
+                type_annotate_method_stmt(s, class_type)
+            for s in sexcept:
+                type_annotate_method_stmt(s, class_type)
+
+def type_annotate_method_expr(e: Expr, class_type: TClass):
+    match e:
+        case EVar(Id("self")):
+            e.type = class_type
+            return
+        case EConst(_):
+            return
+        case EOp1(_, expr):
+            type_annotate_method_expr(expr, class_type)
+        case EOp2(left, _, right):
+            type_annotate_method_expr(left, class_type)
+            type_annotate_method_expr(right, class_type)
+        case EIf(test, body, orelse):
+            type_annotate_method_expr(test, class_type)
+            type_annotate_method_expr(body, class_type)
+            type_annotate_method_expr(orelse, class_type)
+        case ETuple(exprs):
+            for expr in exprs:
+                type_annotate_method_expr(expr, class_type)
+        case ETupleAccess(expr, _):
+            type_annotate_method_expr(expr, class_type)
+        case ETupleLen(expr):
+            type_annotate_method_expr(expr, class_type)
+        case ECall(fun, args):
+            type_annotate_method_expr(fun, class_type)
+            for expr in args:
+                type_annotate_method_expr(expr, class_type)
+        case ELambda(_, expr):
+            type_annotate_method_expr(expr, class_type)
+        case EField(expr, _):
+            type_annotate_method_expr(expr, class_type)
+        case EMethod(expr, _, args):
+            type_annotate_method_expr(expr, class_type)
+            for expr in args:
+                type_annotate_method_expr(expr, class_type)
+
 
 # infer type of an expression        
 def type_check_expr(ctx: TCtx, e: Expr) -> Type:
@@ -242,6 +337,8 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
             exprtype = type_check_expr(ctx, expr)
             match exprtype:
                 case TClass(classname, fields, methods):
+                    if len(methods) == 0:
+                        raise TypeError(f"could not find any methods associated with {classname}")
                     e.type = exprtype
                     for mname, mtype in methods:
                         if mname == name:

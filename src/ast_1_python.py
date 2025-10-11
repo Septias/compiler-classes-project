@@ -25,7 +25,7 @@ type Expr = EConst | EVar | EOp1 | EOp2 | EInput | EIf \
 class EConst:
     value: int | bool | NoneType
 
-@dataclass(frozen=True)
+@dataclass
 class EVar:
     name: Id
 

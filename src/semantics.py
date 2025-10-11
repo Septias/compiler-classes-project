@@ -281,7 +281,7 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                 except Exception:
                     assign(env, name, cv)
                 else:
-                    raise Exception(f"interpreter found multiple definotons of class {name}")    
+                    raise Exception(f"interpreter found multiple definotons of class {name}")
 
 def eval_decls(env: RTEnv, defs: IList[Decl]):
     for d in defs:

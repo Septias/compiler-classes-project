@@ -52,7 +52,7 @@ class EIf:
 
 @dataclass(frozen=True)
 class ETuple:
-    es: IList[Expr]
+    es: IList[Expr] | IList["Decl"]
 
 @dataclass(frozen=True)
 class ETupleAccess:

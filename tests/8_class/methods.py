@@ -12,9 +12,22 @@ class RGB:
     def makemoreblue(self, m: int) -> None:
         self.blue = self.blue + m
 
+    def evenmoreblue(self, g: int) -> None:
+        self.blue = self.blue + g + g
+
+    def makemoreblueandred(self, m: int) -> None:
+        self.makemoreblue(m)
+        self.red = self.red + m
+
+
 r = RGB(100, 24, 2)
 print(r.intensity())
 print(r.addintensity(10))
 print(r.blue)
 r.makemoreblue(5)
 print(r.blue)
+r.evenmoreblue(2)
+print(r.blue)
+r.makemoreblueandred(6)
+print(r.blue)
+print(r.red)

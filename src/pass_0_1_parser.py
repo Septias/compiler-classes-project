@@ -7,7 +7,7 @@ from ast_1_python import *
 from identifier import Id
 from util.immutable_list import IList, ilist
 
-# as classes baheve like types and types are parsed statically, we need to keep track of all defined classes, their fields and methods
+# as classes bahave like types and types are parsed statically, we need to keep track of all defined classes, their fields and methods
 type Cctx = dict[Id, tuple[IList[tuple[Id, Type]], IList[tuple[Id, TCallable]]]]
 
 @dataclass(frozen=True)
@@ -156,9 +156,10 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                                 if arg.arg != "self":
                                     raise UnsupportedFeature(classop)
                                 else:
-                                    # we annotate self with None as the type is always clear
+                                    # we annotate self.
+                                    # the type should always be clear
                                     # other annotations of self are ignored!
-                                    method_params.append((Id("self"), None))
+                                    method_params.append((Id("self"), TClass(Id(name), ilist(), ilist())))
                             else:
                                 id = Id(arg.arg)
                                 ty = map_type_node(arg.annotation, ctx)
