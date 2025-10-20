@@ -74,8 +74,9 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
             return tgt.STry(body, x, handler)
         # class statement - generate class object and constructor
         case src.SClass(name, fields, methods):
-            # TODO: get closures into the class object
-            
+            # TODO: get closures into the class object. We want to treat them like functions inside a tuple
+            # also replace all instances of self with the self tuple
+            closures = tgt.ETuple(ilist())
             class_obj = tgt.ETuple(ilist())
             ids = [field[0] for field in fields]
             constructor_body = ilist(tgt.SReturn(tgt.ETuple(IList([class_obj] + [tgt.EVar(id) for id in ids]))))
@@ -128,6 +129,7 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         case src.ELambda(params, body):
             return tgt.ELambda(params, shrink_expr(body))
         # END
+        # TODO: also handle field access for method calls
         case src.EField(expr, name):
             class_type = e.type
             i = 0

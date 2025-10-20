@@ -177,10 +177,18 @@ def pretty_stmt(s: Stmt) -> str:
         case SExpr(e):
             return pretty_expr(e)
         case SAssign(x, t, e):
-            if t is None:
-                return f"{x} = {pretty_expr(e)}"
-            else:
-                return f"{x}: {pretty_type(t)} = {pretty_expr(e)}"
+            match x: 
+                case Id(_):
+                    if t is None:
+                        return f"{x} = {pretty_expr(e)}"
+                    else:
+                        return f"{x}: {pretty_type(t)} = {pretty_expr(e)}"
+                case EField(_):
+                    if t is None:
+                        return f"{pretty_expr(x)} = {pretty_expr(e)}"
+                    else:
+                        return f"{pretty_expr(x)}: {pretty_type(t)} = {pretty_expr(e)}"
+                    
         case SPrint(e):
             return "print(" + pretty_expr(e) + ")"
         case SIf(test, body, orelse):

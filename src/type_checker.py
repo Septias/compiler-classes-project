@@ -41,7 +41,11 @@ def type_check_def(ctx: TCtx, d: Decl):
             local_ctx.update(parameters)
             local_ctx[Id('@ret')] = result_type
             if not type_check_stmts(local_ctx, body):
-                raise TypeError(f"Function {funcvar} does not return {result_type} on all paths")
+                match result_type:
+                    case TNone():
+                        pass
+                    case _:
+                        raise TypeError(f"Function {funcvar} does not return {result_type} on all paths")
 
 def type_check_stmts(ctx: TCtx, ss: IList[Stmt]) -> bool:
     for s in ss:
@@ -61,13 +65,15 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
         case SAssign(x, t, e):
             te = type_check_expr(ctx, e)
             match x:
-                case EField(e, fieldname):
+                case EField(e, tfieldname):
                     ty = type_check_expr(ctx, e)
                     match ty:
                         case TClass(classname, fields, methods):
-                            ...
+                            for fieldname, fieldtype in fields:
+                                if tfieldname == fieldname:
+                                    check_type_equal(te, fieldtype, s)
                         case _:
-                            raise TypeError(f"")
+                            raise TypeError(f"can not access field of type {ty}")
                     ...
                     return False
                 case Id(_):
@@ -143,7 +149,7 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                 for stmt in method.body:
                     type_annotate_method_stmt(stmt, class_type)
                 type_check_def(ctx, method)
-            # return value should only be True if expression type is correct?
+            # return value should only be True if we return from a method or statement
             return False
 
 # these have the job to annotate the TClass to all occurances of self in methods
