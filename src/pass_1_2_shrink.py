@@ -11,10 +11,13 @@ def shrink(p: src.Program) -> tgt.Program:
     global class_constructors
     class_constructors = []
 
+    global class_methods
+    class_methods = []
+
     # Add the top-level statements to a function called `program_main`
     program_main_body = shrink_stmts(p.main_body)
     program_main = tgt.DFun(tgt.Id("program_main"), ilist(), program_main_body)
-    new_decls = new_decls + IList(class_constructors)
+    new_decls = new_decls + IList(class_constructors) + IList(class_methods)
     # Create the real main function which calls the `program_main` in a try-block
     # to report exceptions which otherwise would be unhandled.
     exc_id = Id.fresh("x")
@@ -51,8 +54,12 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
         # BEGIN
         case src.SAssign(x, _, e):
         # END
-            e = shrink_expr(e)
-            return tgt.SAssign(x, e)
+            match x:
+                case Id(_):
+                    e = shrink_expr(e)
+                    return tgt.SAssign(x, e)
+                case src.EField(e, name):
+                    raise NotImplementedError("Assignments to member variables does not work yet")
         case src.SIf(e, b1, b2):
             e = shrink_expr(e)
             b1 = shrink_stmts(b1)
@@ -75,12 +82,17 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
         # class statement - generate class object and constructor
         case src.SClass(name, fields, methods):
             # TODO: get closures into the class object. We want to treat them like functions inside a tuple
-            # also replace all instances of self with the self tuple
-            closures = tgt.ETuple(ilist())
-            class_obj = tgt.ETuple(ilist())
+            closures = []
+            for method in methods:
+                shrunk = shrink_decl(method)
+                method_to_fun_name = name.name + "$" + shrunk.name.name
+                shrunken = tgt.DFun(Id(method_to_fun_name), shrunk.params, shrunk.body)
+                class_methods.append(shrunken)
+                closures.append(tgt.EVar(Id(method_to_fun_name)))
+            class_obj = tgt.ETuple(IList(closures))
             ids = [field[0] for field in fields]
             constructor_body = ilist(tgt.SReturn(tgt.ETuple(IList([class_obj] + [tgt.EVar(id) for id in ids]))))
-            constructor = tgt.DFun(name, ids, constructor_body)
+            constructor = tgt.DFun(name, IList(ids), constructor_body)
             class_constructors.append(constructor)
             return tgt.SExpr(class_obj)
 
@@ -131,10 +143,31 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         # END
         # TODO: also handle field access for method calls
         case src.EField(expr, name):
-            class_type = e.type
-            i = 0
-            for field_name, field_type in class_type.fields:
-                if field_name == name:
-                    break
-                i += 1
-            return tgt.ETupleAccess(shrink_expr(expr), i + 1)
+            class_type = e.type # type: ignore
+            field_ids = [f[0]for f in class_type.fields]
+            if name in field_ids:
+                i = 0
+                for field_name in field_ids:
+                    if field_name == name:
+                        break
+                    i += 1
+                return tgt.ETupleAccess(shrink_expr(expr), i + 1)
+            else:
+                raise RuntimeError(f"Broken pipeline: field {name} does not exist for {class_type}")
+        case src.EMethod(expr, name, args):
+            class_type = e.type # type: ignore
+            method_ids = [f[0]for f in class_type.methods]
+            if name in method_ids:
+                i = 0
+                for method_name in method_ids:
+                    if method_name == name:
+                        break
+                    i += 1
+                clazz = tgt.ETupleAccess(shrink_expr(expr), 0)
+                # this should be an EVar whos name is the name of the method/function
+                method = tgt.ETupleAccess(clazz, i)
+                # shrink args:
+                new_args = [shrink_expr(expr)]
+                for arg in args:
+                    new_args.append(shrink_expr(arg))
+                return tgt.ECall(method, IList(new_args))

@@ -52,7 +52,7 @@ class EIf:
 
 @dataclass(frozen=True)
 class ETuple:
-    es: IList[Expr] | IList["Decl"]
+    es: IList[Expr]
 
 @dataclass(frozen=True)
 class ETupleAccess:
@@ -144,6 +144,8 @@ def pretty_decl(d: Decl) -> str:
             params_str = ", ".join(str(x) for x in params)
             return f"def {name}({params_str}):\n" + \
                    indent(pretty_stmts(body))
+        case _:
+            return f"broken function: {d}"
 
 def pretty_stmts(ss: IList[Stmt]) -> str:
     return "\n".join(pretty_stmt(s) for s in ss)
@@ -200,5 +202,7 @@ def pretty_expr(e: Expr) -> str:
             params_str = ", ".join(str(x) for x in params)
             body_str = pretty_expr(body)
             return f"lambda {params_str}: {body_str}"
+        case DFun(_):
+            return "\n" + pretty_decl(e)
         case _:
             return f"found unknown: {e}"

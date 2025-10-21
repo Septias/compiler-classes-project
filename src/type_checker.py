@@ -338,7 +338,7 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                     raise NameError(f"Cannot find a field with the name {fieldname} in class {classtype}")
                 case t:
                     raise TypeError(f"Cannot access field of non-class type {t}")
-        # TODO!
+        # TODO: check if this is complete (method enforcement)
         case EMethod(expr, name, args):
             exprtype = type_check_expr(ctx, expr)
             match exprtype:
