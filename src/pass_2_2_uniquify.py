@@ -34,13 +34,17 @@ def uniquify_stmt(renaming: dict[Id, Id], s: src.Stmt) -> tgt.Stmt:
             e = uniquify_expr(renaming, e)
             return tgt.SPrint(e)
         case src.SAssign(x, e):
-            if x in renaming:
-                y = renaming[x]
-            else:
-                y = Id.fresh(x.name)
-                renaming[x] = y
-            e = uniquify_expr(renaming, e)
-            return tgt.SAssign(y, e)
+            match x:
+                case Id(_):
+                    if x in renaming:
+                        y = renaming[x]
+                    else:
+                        y = Id.fresh(x.name)
+                        renaming[x] = y
+                    e = uniquify_expr(renaming, e)
+                    return tgt.SAssign(y, e)
+                case src.ETupleAccess(expr, idx):
+                    return tgt.SAssign(tgt.ETupleAccess(uniquify_expr(renaming, expr), idx), uniquify_expr(renaming, e))
         case src.SIf(e, b1, b2):
             e = uniquify_expr(renaming, e)
             b1 = uniquify_stmts(renaming, b1)

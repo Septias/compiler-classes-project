@@ -214,8 +214,10 @@ def type_annotate_method_expr(e: Expr, class_type: TClass):
         case ELambda(_, expr):
             type_annotate_method_expr(expr, class_type)
         case EField(expr, _):
+            e.type = class_type
             type_annotate_method_expr(expr, class_type)
         case EMethod(expr, _, args):
+            e.type = class_type
             type_annotate_method_expr(expr, class_type)
             for expr in args:
                 type_annotate_method_expr(expr, class_type)

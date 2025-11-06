@@ -92,7 +92,7 @@ class SPrint:
 
 @dataclass(frozen=True)
 class SAssign:
-    lhs: Id
+    lhs: Id | ETupleAccess
     rhs: Expr
 
 @dataclass(frozen=True)

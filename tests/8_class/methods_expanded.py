@@ -11,13 +11,16 @@ class RGB:
 
     def makemoreblue(self, m: int) -> None:
         self.blue = self.blue + m
+        return None
 
     def evenmoreblue(self, g: int) -> None:
         self.blue = self.blue + g + g
+        return None
 
     def makemoreblueandred(self, m: int) -> None:
         self.makemoreblue(m)
         self.red = self.red + m
+        return None
 
 
 r = RGB(100, 24, 2)

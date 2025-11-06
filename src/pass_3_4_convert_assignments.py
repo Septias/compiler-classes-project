@@ -44,12 +44,19 @@ def conv_ass_stmt(AF: set[Id], s: src.Stmt) -> tgt.Stmt:
             e = conv_ass_expr(AF, e)
             return tgt.SPrint(e)
         case src.SAssign(x, e):
-            if x in AF:
-                lhs = tgt.LSubscript(tgt.EVar(x), 0)
-            else:
-                lhs = tgt.LId(x)
-            e = conv_ass_expr(AF, e)
-            return tgt.SAssign(lhs, e)
+            match x:
+                case Id(_):
+                    if x in AF:
+                        lhs = tgt.LSubscript(tgt.EVar(x), 0)
+                    else:
+                        lhs = tgt.LId(x)
+                    e = conv_ass_expr(AF, e)
+                    return tgt.SAssign(lhs, e)
+                # we assign inside a tuple for other reasons (currently only class member variable assignment)
+                case src.ETupleAccess(expr, idx):
+                    lhs = tgt.LSubscript(conv_ass_expr(AF, expr), idx)
+                    e = conv_ass_expr(AF, e)
+                    return tgt.SAssign(lhs, e)
         case src.SIf(e, b1, b2):
             e = conv_ass_expr(AF, e)
             b1 = conv_ass_stmts(AF, b1)

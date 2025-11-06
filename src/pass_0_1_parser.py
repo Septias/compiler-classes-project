@@ -65,6 +65,8 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
             return EConst(value)
         case ast.Constant(value) if type(value) is bool:
             return EConst(value)
+        case ast.Constant(value) if value is None:
+            return EConst(None)
         case ast.Name(id, _):
             if not all([(c.isalnum() or c == "_") for c in id]):
                 raise IllegalName(id)
@@ -85,8 +87,10 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
             return SWhile(map_node(test, ctx), map_nodes(body, ctx))
         case ast.Assign(y, value, _):
             match y:
+                # variable != self
                 case [ast.Name(x)] if x != "self":
                     return SAssign(Id(x), None, map_node(value, ctx))
+                # attribute (presumably of class obj - will be checked in the type checker)
                 case [ast.Attribute(e, id)]:
                     return SAssign(EField(map_node(e, ctx), Id(id)), None, map_node(value, ctx))
                 case _:

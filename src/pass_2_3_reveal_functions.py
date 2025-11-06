@@ -37,7 +37,11 @@ def reveal_stmt(funs: set[Id], s: src.Stmt) -> tgt.Stmt:
             return tgt.SPrint(e)
         case src.SAssign(x, e):
             e = reveal_expr(funs, e)
-            return tgt.SAssign(x, e)
+            match x:
+                case Id(_):
+                    return tgt.SAssign(x, e)
+                case src.ETupleAccess(expr, idx):
+                    return tgt.SAssign(tgt.ETupleAccess(reveal_expr(funs, expr), idx), e)
         case src.SIf(e, b1, b2):
             e = reveal_expr(funs, e)
             b1 = reveal_stmts(funs, b1)

@@ -54,11 +54,22 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
         # BEGIN
         case src.SAssign(x, _, e):
         # END
+            e = shrink_expr(e)
             match x:
                 case Id(_):
-                    e = shrink_expr(e)
                     return tgt.SAssign(x, e)
-                case src.EField(e, name):
+                case src.EField(expr, name):
+                    # TODO: we need to assign/override the value inside the tuple with a new one
+                    # how: we already have a way to write inside a tuple when it is being allocated (pass_5_6)
+                    # idea: have subscript assignments (e.g. x[5] = 1), as they functionally do the same thing.
+                    # it boils down to: find heap memory address and write into it.
+                    # we already have subscript assignment in pass 3_4 to deal with assignment conversion in regards to lambdas with free variables
+                    # idea: convert this SAssign with efield on the lhs to a form compatible with LSubscript (needs expr and offset)
+                    # we can get the offset by counting at which point in the tuple the field is located
+                    # ALSO: this can occur in multiple places: 
+                    # 1: inside a method - self is set to the first argument (is that enough?)
+                    # 2: outside one - the variable can be processed like any other
+                    return tgt.SAssign(shrink_expr(x), e)
                     raise NotImplementedError("Assignments to member variables does not work yet")
         case src.SIf(e, b1, b2):
             e = shrink_expr(e)
@@ -81,7 +92,6 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
             return tgt.STry(body, x, handler)
         # class statement - generate class object and constructor
         case src.SClass(name, fields, methods):
-            # TODO: get closures into the class object. We want to treat them like functions inside a tuple
             closures = []
             for method in methods:
                 shrunk = shrink_decl(method)
@@ -141,7 +151,6 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         case src.ELambda(params, body):
             return tgt.ELambda(params, shrink_expr(body))
         # END
-        # TODO: also handle field access for method calls
         case src.EField(expr, name):
             class_type = e.type # type: ignore
             field_ids = [f[0]for f in class_type.fields]
@@ -166,7 +175,7 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                 clazz = tgt.ETupleAccess(shrink_expr(expr), 0)
                 # this should be an EVar whos name is the name of the method/function
                 method = tgt.ETupleAccess(clazz, i)
-                # shrink args:
+                # shrink args, add self first:
                 new_args = [shrink_expr(expr)]
                 for arg in args:
                     new_args.append(shrink_expr(arg))
