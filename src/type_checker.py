@@ -68,13 +68,12 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                 case EField(e, tfieldname):
                     ty = type_check_expr(ctx, e)
                     match ty:
-                        case TClass(classname, fields, methods):
+                        case TClass(classname, base, fields, methods):
                             for fieldname, fieldtype in fields:
                                 if tfieldname == fieldname:
                                     check_type_equal(te, fieldtype, s)
                         case _:
                             raise TypeError(f"can not access field of type {ty}")
-                    ...
                     return False
                 case Id(_):
                     if t is None:
@@ -115,7 +114,7 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             rh = type_check_stmts(ctx, handler)
             return rb and rh
         # TODO: check if this is correct
-        case SClass(name, fields, methods):
+        case SClass(name, base, fields, methods):
             if name in ctx:
                 raise TypeError(f"the name {name} is already in use for a class or function")
             # is this enough for the class definition -> constructor context?
@@ -130,7 +129,7 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                 if method.name in methodnames:
                     raise NameError(f"multiple use of {method.name} for name of method in class {name}")
                 match method.params[0]:
-                    case (Id("self"), TClass(Id(iname), _, _)):
+                    case (Id("self"), TClass(Id(iname), _, _, _)):
                         class_name = name.name
                         if iname != class_name:
                             raise NameError(f"type not accertainable: {iname}, {name}")
@@ -140,7 +139,7 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                 # TODO: type check methods
                 methodnames.append(method.name)
             methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
-            class_type = TClass(name, fields, IList(methods_types))
+            class_type = TClass(name, base, fields, IList(methods_types))
             ctx[name] = class_type
             # go over all methods again and annotate the selfs
             for method in methods:
@@ -318,7 +317,7 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                         check_expr(ctx, e, ty)
                     return res_ty
                 # constructor call
-                case TClass(name, fields):
+                case TClass(name, _, fields, _):
                     if len(es) != len(fields):
                         raise TypeError(f"Constructor of Class {name} called with wrong number of arguments")
                     field_tys = [attr[1] for attr in fields]
@@ -333,7 +332,7 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
             exprtype = type_check_expr(ctx, expr)
             e.type = exprtype
             match exprtype:
-                case TClass(classtype, fields, _):
+                case TClass(classtype, _, fields, _):
                     for (name, fieldtype) in fields:
                         if name == fieldname:
                             return fieldtype
@@ -344,7 +343,7 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
         case EMethod(expr, name, args):
             exprtype = type_check_expr(ctx, expr)
             match exprtype:
-                case TClass(classname, fields, methods):
+                case TClass(classname, base, fields, methods):
                     if len(methods) == 0:
                         raise TypeError(f"could not find any methods associated with {classname}")
                     e.type = exprtype
@@ -390,10 +389,20 @@ def check_expr(ctx: TCtx, e: Expr, ty: Type):
 
 
 # Type Equality
-
+# here we check for tansitive subtyping
 def check_type_equal(thave: Type, texpect: Type, es: Expr | Stmt):
-    if thave != texpect:
-        raise TypeError(f"I got {repr(thave)} but I expected {repr(texpect)} in {repr(es)}")
+    match (thave, texpect):
+        case (TClass(_, _, _, _), TClass(_, _, _, _)):
+            want = texpect
+            have = thave
+            while have is not None:
+                if want == have:
+                    return
+                have = have.super
+            raise TypeError(f"class mismatch: {repr(thave)} seems to not be a subclass of {repr(texpect)} in {repr(es)}")
+        case _:
+            if thave != texpect:
+                raise TypeError(f"I got {repr(thave)} but I expected {repr(texpect)} in {repr(es)}")
 
 def check_ctx_equal(ctx1: TCtx, ctx2: TCtx, es: Expr | Stmt):
     for x in ctx1:

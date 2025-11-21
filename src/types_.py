@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from util.immutable_list import IList
 from identifier import Id
+from typing import Optional
 
 # Type Syntax
 
@@ -30,6 +31,7 @@ class TCallable:
 @dataclass
 class TClass:
     name: Id
+    super: Optional[Type]
     fields: IList[tuple[Id, Type]]
     methods: IList[tuple[Id, TCallable]]
 

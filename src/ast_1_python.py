@@ -151,6 +151,7 @@ class Program:
 @dataclass(frozen=True)
 class SClass:
     name: Id
+    super: Optional[Type]
     fields: IList[tuple[Id, Type]]
     methods: IList[DFun]
 
@@ -208,9 +209,13 @@ def pretty_stmt(s: Stmt) -> str:
                     f"except {x}:\n" \
                     f"{indent(pretty_stmts(s_except))}"
         # TODO: add methods
-        case SClass(name, fields, methods):
+        case SClass(name, base, fields, methods):
             field_str = "\n".join(f"{x}: {pretty_type(t)}" for (x, t) in fields)
-            return f"{name}:\n{indent(field_str)}\n\n" + indent("\n\n".join(pretty_decl(m) for m in methods)) + "\n"
+            basestr = ""
+            match base:
+                case TClass(bname, _, _, _):
+                    basestr = "(" + bname.name + ")"
+            return f"{name}{basestr}:\n{indent(field_str)}\n\n" + indent("\n\n".join(pretty_decl(m) for m in methods)) + "\n"
 
 def pretty_expr(e: Expr) -> str:
     match e:

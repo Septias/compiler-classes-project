@@ -7,8 +7,8 @@ from ast_1_python import *
 from identifier import Id
 from util.immutable_list import IList, ilist
 
-# as classes bahave like types and types are parsed statically, we need to keep track of all defined classes, their fields and methods
-type Cctx = dict[Id, tuple[IList[tuple[Id, Type]], IList[tuple[Id, TCallable]]]]
+# as classes bahave like types and types are parsed statically, we need to keep track of all defined classes
+type Cctx = dict[Id, TClass]
 
 @dataclass(frozen=True)
 class ParseError(Exception):
@@ -142,9 +142,26 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
         case ast.Try(body, [ast.ExceptHandler(ast.Name("Exception"), x, ex_body)], [], []) if x is not None:
             return STry(map_nodes(body, ctx), Id(x), map_nodes(ex_body, ctx))
         # map classes
-        case ast.ClassDef(name, _, _, body, _):
+        case ast.ClassDef(name, bases, _, body, _):
+            baseclass: Optional[Type] = None
             params = []
             methods: list[DFun] = []
+            if len(bases) == 1:
+                #check if base class is defined:
+                bcl = bases[0]
+                match bcl:
+                    case ast.Name(bcn):
+                        bcni = Id(bcn)
+                        if bcni not in ctx.keys():
+                            raise TypeError(f"class {bcni} could not be found")
+                        baseclass = ctx[bcni]
+                        # copy the fields we have in the base class
+                        # params.extend(baseclass.fields)
+                    case _:
+                        raise TypeError(f"{name} tries to inherit from {bcl}, but this cant be inherited")
+            elif len(bases) > 1:
+                raise UnsupportedFeature(f"only single inheritance is supported, got {len(bases)} base classes")
+            # get the single class operations (attribute or method def)
             for classop in body:
                 match classop:
                     # attribute of class is being defined
@@ -163,7 +180,7 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                                     # we annotate self.
                                     # the type should always be clear
                                     # other annotations of self are ignored!
-                                    method_params.append((Id("self"), TClass(Id(name), ilist(), ilist())))
+                                    method_params.append((Id("self"), TClass(Id(name), None, ilist(), ilist())))
                             else:
                                 id = Id(arg.arg)
                                 ty = map_type_node(arg.annotation, ctx)
@@ -175,10 +192,9 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                         methods.append(DFun(Id(mname), IList(method_params), ret_ty, map_nodes(mbody, ctx)))
                     case _:
                         raise UnsupportedFeature(classop)
-            # TODO: change to TCallable
             methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
-            ctx[Id(name)] = (IList(params), IList(methods_types))
-            return SClass(Id(name), IList(params), IList(methods))
+            ctx[Id(name)] = TClass(Id(name), baseclass,IList(params), IList(methods_types))
+            return SClass(Id(name), baseclass, IList(params), IList(methods))
         case ast.Attribute(e, id):
             return EField(map_node(e, ctx), Id(id))
         # this is for method calls
@@ -208,7 +224,7 @@ def map_type_node(node: ast.AST, ctx: Cctx) -> Type:
             return TCallable(map_type_nodes(params, ctx), map_type_node(ret, ctx))
         case ast.Name(classname, _):
             if Id(classname) in ctx:
-                return TClass(Id(classname), ctx[Id(classname)][0], ctx[Id(classname)][1])
+                return ctx[Id(classname)]
             else:
                 raise UnknownTypeError(classname)
         case ast.Constant(None):

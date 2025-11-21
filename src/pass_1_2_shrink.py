@@ -91,7 +91,7 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
             handler = shrink_stmts(handler)
             return tgt.STry(body, x, handler)
         # class statement - generate class object and constructor
-        case src.SClass(name, fields, methods):
+        case src.SClass(name, base, fields, methods):
             closures = []
             for method in methods:
                 shrunk = shrink_decl(method)
