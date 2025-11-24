@@ -117,7 +117,15 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
         case SClass(name, base, fields, methods):
             if name in ctx:
                 raise TypeError(f"the name {name} is already in use for a class or function")
-            # is this enough for the class definition -> constructor context?
+            # make insurances over the base class
+            match base:
+                case TClass(parentname, _, _, _):
+                    if name == parentname:
+                        raise TypeError(f"Class {name} can not inherit from itself")
+                case TNone() | TTuple() | TCallable() as obj:
+                    raise TypeError(f"Type {type(obj).__name__} is not an acceptable base type")
+                case TBool() | TInt() | None:
+                    pass
             fieldnames = []
             for fieldname, _ in fields:
                 if fieldname in fieldnames:
@@ -317,8 +325,14 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                         check_expr(ctx, e, ty)
                     return res_ty
                 # constructor call
-                case TClass(name, _, fields, _):
-                    if len(es) != len(fields):
+                case TClass(name, super, fields, _):
+                    membervars = 0
+                    while super is not None:
+                        match super:
+                            case TClass(_, new_super, new_fields, _):
+                                membervars += len(new_fields)
+                                super = new_super
+                    if len(es) != membervars + len(fields):
                         raise TypeError(f"Constructor of Class {name} called with wrong number of arguments")
                     field_tys = [attr[1] for attr in fields]
                     for (e, ty) in zip(es, field_tys):
@@ -331,14 +345,19 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
         case EField(expr, fieldname):
             exprtype = type_check_expr(ctx, expr)
             e.type = exprtype
-            match exprtype:
-                case TClass(classtype, _, fields, _):
-                    for (name, fieldtype) in fields:
-                        if name == fieldname:
-                            return fieldtype
-                    raise NameError(f"Cannot find a field with the name {fieldname} in class {classtype}")
-                case t:
-                    raise TypeError(f"Cannot access field of non-class type {t}")
+            super = exprtype
+            while super is not None:
+                match super:
+                    case TClass(_, new_super, fields, _):
+                        for (name, fieldtype) in fields:
+                            if name == fieldname:
+                                return fieldtype
+                        super = new_super
+                    case TInt() | TBool():
+                        raise NameError(f"could not find {fieldname} in {exprtype} or any of its parent classes")
+                    case TCallable() | TTuple() | TNone():
+                        raise TypeError(f"Illegal parent type for {exprtype}")
+            raise NameError(f"Cannot find a field with the name {fieldname} in class {exprtype}")
         # TODO: check if this is complete (method enforcement)
         case EMethod(expr, name, args):
             exprtype = type_check_expr(ctx, expr)
@@ -390,6 +409,7 @@ def check_expr(ctx: TCtx, e: Expr, ty: Type):
 
 # Type Equality
 # here we check for tansitive subtyping
+# TODO: expect can be primitive if inherited from e.g. int
 def check_type_equal(thave: Type, texpect: Type, es: Expr | Stmt):
     match (thave, texpect):
         case (TClass(_, _, _, _), TClass(_, _, _, _)):

@@ -180,7 +180,7 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                                     # we annotate self.
                                     # the type should always be clear
                                     # other annotations of self are ignored!
-                                    method_params.append((Id("self"), TClass(Id(name), None, ilist(), ilist())))
+                                    method_params.append((Id("self"), TClass(Id(name), baseclass, ilist(), ilist())))
                             else:
                                 id = Id(arg.arg)
                                 ty = map_type_node(arg.annotation, ctx)

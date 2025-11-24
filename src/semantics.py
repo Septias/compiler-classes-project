@@ -1,9 +1,10 @@
 from ast import expr
 from dataclasses import dataclass
 from optparse import Option
-from re import T
+# from re import TEMPLATE as T
 from typing import Optional
 from types import NoneType
+from collections import Counter
 
 from ast_1_python import *
 from util.immutable_list import IList, ilist
@@ -60,6 +61,7 @@ class UserException(Exception):
 @dataclass(frozen=True)
 class VClass:
     name: Id
+    super: Optional[Type]
     fieldnames: IList[Id]
     methods: IList[tuple[Id, Value]]
 
@@ -75,7 +77,20 @@ def apply_fun(f: Value, xs: tuple[Value, ...]) -> Optional[Value]:
         case VFunction(_, parms, body, env):
             fenv = RTEnv(dict(zip(parms, xs)), env)
             return eval_stmts(fenv, body)
-        case VClass(_, fieldnames):
+        case VClass(_, super, fieldnames, _):
+            while super is not None:
+                match super:
+                    case TClass(_, super_super, super_fieldnames, _):
+                        fieldnames = super_fieldnames + fieldnames
+                        super = super_super
+                    case TNone() | TCallable() | TTuple():
+                        raise AssertionError(f"This should be caught by the type checker")
+                    case TBool() | TInt():
+                        super = None
+            counts = Counter(fieldnames)
+            duplicate_elements = [ item for item, count in counts.items() if count > 1]
+            if len(duplicate_elements) > 0:
+                raise Exception(f"Multiple use of member names: {duplicate_elements}")
             if len(xs) != len(fieldnames):
                 raise Exception(f"Class expected {len(fieldnames)} arguments for construction but got {len(xs)}")
             res = {}
@@ -94,8 +109,8 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
         case EOp1(op, e):
             v = eval_expr(env, e)
             match v:
-                case VTuple(_) | VFunction() | None:
-                    raise Exception("Unary operator '{op}' not allowed for '{pretty_expr(e)}'")
+                case VTuple(_) | VFunction() | VClass() | VObject() | None:
+                    raise Exception(f"Unary operator '{op}' not allowed for '{pretty_expr(e)}'")
                 case _:
                     match op:
                         case "-":
@@ -269,13 +284,25 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                             r = eval_stmts(env, handler)
                             if r is not None:
                                 return r
-            case SClass(name, fields, methods):
+            # TODO: fix for super
+            case SClass(name, super, fields, methods):
+                parentclass = None
+                match super:
+                    case None:
+                        pass
+                    case TClass(n, _, _, _):
+                        try:
+                            parentclass = lookup(env, n)
+                        except:
+                            raise Exception(f"parent class {n} could not be found")
+                    case _:
+                        raise Exception(f"parent class {super} can not be inherited from")
                 fieldIds = IList([x[0] for x in fields])
                 vmethods = []
                 for method in methods:
                     vfun = VFunction(method.name, IList([m[0] for m in method.params]), method.body, env)
                     vmethods.append((method.name, vfun))
-                cv = VClass(name, fieldIds, IList(vmethods))
+                cv = VClass(name, parentclass, fieldIds, IList(vmethods))
                 try:
                     lookup(env, name)
                 except Exception:
