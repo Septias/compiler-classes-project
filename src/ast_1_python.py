@@ -143,6 +143,7 @@ class DFun:
 
 @dataclass
 class Program:
+    classes: IList[SClass]
     decls: IList[Decl]
     main_body: IList[Stmt]
 
@@ -161,7 +162,7 @@ def indent(s: str) -> str:
     return "\n".join(4 * " " + l for l in s.splitlines())
 
 def pretty(p: Program) -> str:
-    return "\n\n".join(pretty_decl(d) for d in p.decls) + "\n\n" + pretty_stmts(p.main_body)
+    return pretty_stmts(p.classes) + "\n\n".join(pretty_decl(d) for d in p.decls) + "\n\n" + pretty_stmts(p.main_body)
 
 def pretty_decl(d: Decl) -> str:
     match d:

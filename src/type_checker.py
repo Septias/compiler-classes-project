@@ -18,10 +18,11 @@ type TCtx = dict[Id, Type]
 
 def type_check(p: Program):
     match p:
-        case Program(defs, body):
+        case Program(classes, defs, body):
             ctx: TCtx = dict()
             for d in defs:
                 type_declare_def(ctx, d)
+            type_check_stmts(ctx, classes)
             for d in defs:
                 type_check_def(ctx, d)
             type_check_stmts(ctx, body)

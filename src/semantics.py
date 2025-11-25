@@ -63,7 +63,7 @@ class VClass:
     name: Id
     super: Optional[Type]
     fieldnames: IList[Id]
-    methods: IList[tuple[Id, Value]]
+    methods: IList[Value]
 
 @dataclass
 class VObject:
@@ -81,12 +81,12 @@ def apply_fun(f: Value, xs: tuple[Value, ...]) -> Optional[Value]:
             while super is not None:
                 match super:
                     case TClass(_, super_super, super_fieldnames, _):
-                        fieldnames = super_fieldnames + fieldnames
+                        fieldnames = IList([superfield[0] for superfield in super_fieldnames]) + fieldnames
                         super = super_super
-                    case TNone() | TCallable() | TTuple():
-                        raise AssertionError(f"This should be caught by the type checker")
                     case TBool() | TInt():
                         super = None
+                    case _:
+                        raise TypeError(f"impossible parent type found at runtime: {super}")
             counts = Counter(fieldnames)
             duplicate_elements = [ item for item, count in counts.items() if count > 1]
             if len(duplicate_elements) > 0:
@@ -191,7 +191,7 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
             xs = tuple(eval_expr(env, x) for x in args)
             match apply_fun(f, xs):
                 case None:
-                    raise Exception("Tried to use void function in expressions")
+                    raise Exception(f"Tried to use void function in expressions near {e}")
                 case v:
                     return v
         case ELambda(xs, expr):
@@ -209,18 +209,17 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
             obj = eval_expr(env, e)
             match obj:
                 case VObject(classref, fields):
-                    for methodname, methodval in classref.methods:
-                        if name == methodname:
-                            match methodval:
-                                case VFunction():
-                                    evals = []
-                                    evals.append(obj)
-                                    for arg in args:
-                                        evals.append(eval_expr(env, arg))
-                                    args = tuple(evals)
-                                    return apply_fun(methodval, args)
-                                case _:
-                                    raise Exception("method is not callable")
+                    for method in classref.methods:
+                        match method:
+                            case VFunction() if name == method.name:
+                                evals = []
+                                evals.append(obj)
+                                for arg in args:
+                                    evals.append(eval_expr(env, arg))
+                                args = tuple(evals)
+                                return apply_fun(method, args)
+                            case _:
+                                raise Exception("method is not callable")
                     raise Exception(f"Could not find the method {name} in class {classref.name}")
                 case _:
                     raise Exception("Method Call on non-class object")
@@ -286,23 +285,24 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                                 return r
             # TODO: fix for super
             case SClass(name, super, fields, methods):
-                parentclass = None
                 match super:
                     case None:
                         pass
                     case TClass(n, _, _, _):
                         try:
-                            parentclass = lookup(env, n)
+                            lookup(env, n)
                         except:
                             raise Exception(f"parent class {n} could not be found")
+                    case TInt() | TBool():
+                        pass
                     case _:
                         raise Exception(f"parent class {super} can not be inherited from")
                 fieldIds = IList([x[0] for x in fields])
                 vmethods = []
                 for method in methods:
                     vfun = VFunction(method.name, IList([m[0] for m in method.params]), method.body, env)
-                    vmethods.append((method.name, vfun))
-                cv = VClass(name, parentclass, fieldIds, IList(vmethods))
+                    vmethods.append(vfun)
+                cv = VClass(name, super, fieldIds, IList(vmethods))
                 try:
                     lookup(env, name)
                 except Exception:
@@ -319,6 +319,11 @@ def eval_decls(env: RTEnv, defs: IList[Decl]):
 
 def eval_prog(p: Program):
     env: RTEnv = RTEnv(dict(), None)
+    try:
+        eval_stmts(env, p.classes)
+    except UserException as e:
+        print(e.value)
+    print(f"successful class eval. env: {env}")
     eval_decls(env, p.decls)
     try:
         eval_stmts(env, p.main_body)

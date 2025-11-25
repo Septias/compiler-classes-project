@@ -7,7 +7,7 @@ from util.immutable_list import *
 def shrink(p: src.Program) -> tgt.Program:
     new_decls = IList([shrink_decl(d) for d in p.decls])
     # temp var to store the generated class constructor functions
-    # TODO: how do I make this nice?
+    # TODO: p now also has classes member, they are no longer in the body! use it!
     global class_constructors
     class_constructors = []
 

@@ -236,13 +236,16 @@ def map_type_nodes(nodes: Sequence[Any], ctx: Cctx) -> IList[Type]:
     return IList([map_type_node(node, ctx) for node in nodes])
 
 def parse(src_str: str) -> Program:
+    classes = []
     decls = []
     body = []
     ctx: Cctx = dict()
     for n in map_nodes(ast.parse(src_str).body, ctx):
         match n:
+            case SClass(_, _, _, _,):
+                classes.append(n)
             case DFun(_, _, _, _):
                 decls.append(n)
             case _:
                 body.append(n)
-    return Program(IList(decls), IList(body))
+    return Program(IList(classes), IList(decls), IList(body))

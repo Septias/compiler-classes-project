@@ -15,8 +15,8 @@ class Point3d(Point2d):
 def get_x (p: Point2d) -> int:
     return p.x
 
-def test():
-    p3 = Point3d(1, 2, 3)
-    print(get_x(p3))
 
-test()
+p3 = Point3d(1, 2, 3)
+print(get_x(p3))
+print(p3.magnitude())
+
