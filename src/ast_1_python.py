@@ -139,15 +139,7 @@ class DFun:
     ret_ty: Type
     body: IList[Stmt]
 
-# Programs
-
-@dataclass
-class Program:
-    classes: IList[SClass]
-    decls: IList[Decl]
-    main_body: IList[Stmt]
-
-# Class statement (needs to go after DFun definition)
+# Class statement
 
 @dataclass(frozen=True)
 class SClass:
@@ -155,6 +147,14 @@ class SClass:
     super: Optional[Type]
     fields: IList[tuple[Id, Type]]
     methods: IList[DFun]
+
+# Programs
+
+@dataclass
+class Program:
+    classes: IList[SClass]
+    decls: IList[Decl]
+    main_body: IList[Stmt]
 
 # Pretty Printing
 

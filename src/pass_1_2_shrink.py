@@ -15,7 +15,7 @@ def shrink(p: src.Program) -> tgt.Program:
     class_methods = []
 
     # Add the top-level statements to a function called `program_main`
-    program_main_body = shrink_stmts(p.main_body)
+    program_main_body = shrink_stmts(p.classes + p.main_body)
     program_main = tgt.DFun(tgt.Id("program_main"), ilist(), program_main_body)
     new_decls = new_decls + IList(class_constructors) + IList(class_methods)
     # Create the real main function which calls the `program_main` in a try-block
