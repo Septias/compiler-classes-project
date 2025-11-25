@@ -12,6 +12,9 @@ class Point3d(Point2d):
     def magnitude (self) -> int:
         return self.x + self.y + self.z
 
+class SomethingElse:
+    a: int
+
 def get_x (p: Point2d) -> int:
     return p.x
 
@@ -21,4 +24,6 @@ print(p2.magnitude())
 p3 = Point3d(1, 2, 3)
 print(get_x(p3))
 print(p3.magnitude())
+se = SomethingElse(1)
+se.magnitude()
 
