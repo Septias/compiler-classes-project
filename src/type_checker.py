@@ -118,16 +118,21 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
         case SClass(name, base, fields, methods):
             if name in ctx:
                 raise TypeError(f"the name {name} is already in use for a class or function")
+            fieldnames = []
             # make insurances over the base class
             match base:
-                case TClass(parentname, _, _, _):
+                case TClass(parentname, _, parentfields, parentmethods):
                     if name == parentname:
                         raise TypeError(f"Class {name} can not inherit from itself")
+                    if parentname not in ctx:
+                        raise TypeError(f"{name} tries to inherit from not defined class {parentname}")
+                    # we can assume that the fields of the parent are unique, as it was already added to ctx and thus checked
+                    # we also assume that field names MUST be unique over inheritance
+                    fieldnames.extend([field[0] for field in parentfields])
                 case TNone() | TTuple() | TCallable() as obj:
                     raise TypeError(f"Type {type(obj).__name__} is not an acceptable base type")
                 case TBool() | TInt() | None:
                     pass
-            fieldnames = []
             for fieldname, _ in fields:
                 if fieldname in fieldnames:
                     raise NameError(f"multiple use of {fieldname} for name of field in class {name}")
@@ -137,15 +142,13 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             for method in methods:
                 if method.name in methodnames:
                     raise NameError(f"multiple use of {method.name} for name of method in class {name}")
+                if method.name in fieldnames:
+                    raise NameError(f"method name {method.name} is already in use for a field in class {name} or its parents")
                 match method.params[0]:
-                    case (Id("self"), TClass(Id(iname), _, _, _)):
-                        class_name = name.name
-                        if iname != class_name:
-                            raise NameError(f"type not accertainable: {iname}, {name}")
+                    case (Id("self"), TClass(_, _, _, _)):
                         pass
                     case _:
-                        raise TypeError(f"first argument of method {method.name} is not self")     
-                # TODO: type check methods
+                        raise TypeError(f"first argument of method {method.name} from class {name} is not self")     
                 methodnames.append(method.name)
             methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
             class_type = TClass(name, base, fields, IList(methods_types))
@@ -333,6 +336,10 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                             case TClass(_, new_super, new_fields, _):
                                 membervars += len(new_fields)
                                 super = new_super
+                            case TBool() | TInt():
+                                super = None
+                            case _:
+                                raise TypeError(f"{name} has illegal super {super}")
                     if len(es) != membervars + len(fields):
                         raise TypeError(f"Constructor of Class {name} called with wrong number of arguments")
                     field_tys = [attr[1] for attr in fields]
@@ -359,7 +366,7 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                     case TCallable() | TTuple() | TNone():
                         raise TypeError(f"Illegal parent type for {exprtype}")
             raise NameError(f"Cannot find a field with the name {fieldname} in class {exprtype}")
-        # TODO: check if this is complete (method enforcement)
+        # TODO: can currently not check base/super methods
         case EMethod(expr, name, args):
             exprtype = type_check_expr(ctx, expr)
             match exprtype:
@@ -420,7 +427,7 @@ def check_type_equal(thave: Type, texpect: Type, es: Expr | Stmt):
                 if want == have:
                     return
                 have = have.super
-            raise TypeError(f"class mismatch: {repr(thave)} seems to not be a subclass of {repr(texpect)} in {repr(es)}")
+            raise TypeError(f"class mismatch: {repr(thave.name.name)} seems to not be a subclass of {repr(texpect.name.name)} in {repr(es)}")
         case _:
             if thave != texpect:
                 raise TypeError(f"I got {repr(thave)} but I expected {repr(texpect)} in {repr(es)}")

@@ -25,5 +25,6 @@ p3 = Point3d(1, 2, 3)
 print(get_x(p3))
 print(p3.magnitude())
 se = SomethingElse(1)
+print(get_x(se))
 se.magnitude()
 

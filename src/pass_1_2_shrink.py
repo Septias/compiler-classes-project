@@ -6,18 +6,13 @@ from util.immutable_list import *
 
 def shrink(p: src.Program) -> tgt.Program:
     new_decls = IList([shrink_decl(d) for d in p.decls])
-    # temp var to store the generated class constructor functions
-    # TODO: p now also has classes member, they are no longer in the body! use it!
-    global class_constructors
-    class_constructors = []
-
-    global class_methods
-    class_methods = []
+    # convert the class and method definitions
+    class_funs = shrink_classes(p.classes)
 
     # Add the top-level statements to a function called `program_main`
-    program_main_body = shrink_stmts(p.classes + p.main_body)
+    program_main_body = shrink_stmts(p.main_body)
     program_main = tgt.DFun(tgt.Id("program_main"), ilist(), program_main_body)
-    new_decls = new_decls + IList(class_constructors) + IList(class_methods)
+    new_decls = new_decls + class_funs
     # Create the real main function which calls the `program_main` in a try-block
     # to report exceptions which otherwise would be unhandled.
     exc_id = Id.fresh("x")
@@ -42,6 +37,45 @@ def shrink_decl(d: src.Decl) -> tgt.Decl:
 
 def shrink_stmts(ss: IList[src.Stmt]) -> IList[tgt.Stmt]:
     return IList([shrink_stmt(s) for s in ss])
+
+def shrink_classes(cc: IList[src.SClass]) -> IList[tgt.DFun]:
+    all_funs = []
+    for c in cc:
+        all_funs.extend(shrink_class(c))
+    return IList(all_funs)
+
+def shrink_class(c: src.SClass) -> list[tgt.DFun]:
+    class_constructors = []
+    class_methods = []
+    match c:
+        case src.SClass(name, base, fields, methods):
+            closures = []
+            for method in methods:
+                shrunk = shrink_decl(method)
+                method_to_fun_name = name.name + "$" + shrunk.name.name
+                shrunken = tgt.DFun(Id(method_to_fun_name), shrunk.params, shrunk.body)
+                class_methods.append(shrunken)
+                closures.append(tgt.EVar(Id(method_to_fun_name)))
+            class_obj = tgt.ETuple(IList(closures))
+            ids = []
+            while base is not None:
+                match base:
+                    case TClass(_, new_super, super_fields, _):
+                        # new ones in front as we go from child to parent class
+                        ids = [super_field[0] for super_field in super_fields] + ids
+                        base = new_super
+                    case TBool() | TInt():
+                        base = None
+                    case _:
+                        raise TypeError(f"{name} has illegal super {super}")
+            # we have built all parent fields, add fields of current (child) class at the end
+            ids = ids + [field[0] for field in fields]
+            constructor_body = ilist(tgt.SReturn(tgt.ETuple(IList([class_obj] + [tgt.EVar(id) for id in ids]))))
+            constructor = tgt.DFun(name, IList(ids), constructor_body)
+            class_constructors.append(constructor)
+            return class_constructors + class_methods
+        case _:
+            raise Exception(f"internal error: non-class {c} found during shrinking of class defs")
 
 def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
     match s:
@@ -90,21 +124,9 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
             body = shrink_stmts(body)
             handler = shrink_stmts(handler)
             return tgt.STry(body, x, handler)
-        # class statement - generate class object and constructor
-        case src.SClass(name, base, fields, methods):
-            closures = []
-            for method in methods:
-                shrunk = shrink_decl(method)
-                method_to_fun_name = name.name + "$" + shrunk.name.name
-                shrunken = tgt.DFun(Id(method_to_fun_name), shrunk.params, shrunk.body)
-                class_methods.append(shrunken)
-                closures.append(tgt.EVar(Id(method_to_fun_name)))
-            class_obj = tgt.ETuple(IList(closures))
-            ids = [field[0] for field in fields]
-            constructor_body = ilist(tgt.SReturn(tgt.ETuple(IList([class_obj] + [tgt.EVar(id) for id in ids]))))
-            constructor = tgt.DFun(name, IList(ids), constructor_body)
-            class_constructors.append(constructor)
-            return tgt.SExpr(class_obj)
+        # class statements should not occur here as they are treated completley seperatley
+        case src.SClass(name, _, _, _):
+            raise Exception(f"Internal error: encountered class definition of {name} in body.")
 
 
 def shrink_expr(e: src.Expr) -> tgt.Expr:
@@ -153,7 +175,18 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         # END
         case src.EField(expr, name):
             class_type = e.type # type: ignore
-            field_ids = [f[0]for f in class_type.fields]
+            ids = []
+            match class_type:
+                case TClass(name, base, fields, _):
+                    while base is not None:
+                        match base:
+                            case TClass(_, new_super, super_fields, _):
+                                # new ones in front as we go from child to parent class
+                                ids = [super_field[0] for super_field in super_fields] + ids
+                                base = new_super
+                            case TBool() | TInt():
+                                base = None
+            field_ids = ids + [f[0]for f in class_type.fields]
             if name in field_ids:
                 i = 0
                 for field_name in field_ids:
@@ -163,6 +196,7 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                 return tgt.ETupleAccess(shrink_expr(expr), i + 1)
             else:
                 raise RuntimeError(f"Broken pipeline: field {name} does not exist for {class_type}")
+        # TODO: inheritance
         case src.EMethod(expr, name, args):
             class_type = e.type # type: ignore
             method_ids = [f[0]for f in class_type.methods]

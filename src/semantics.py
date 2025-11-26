@@ -189,11 +189,8 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
         case ECall(func, args):
             f = eval_expr(env, func)
             xs = tuple(eval_expr(env, x) for x in args)
-            match apply_fun(f, xs):
-                case None:
-                    raise Exception(f"Tried to use void function in expressions near {e}")
-                case v:
-                    return v
+            # funs can return none, so no need to worry abour returning it if apply_fun does so
+            return apply_fun(f, xs)
         case ELambda(xs, expr):
             return VFunction(Id("lambda"), xs, ilist(SReturn(expr)), env)
         case EField(e, name):
@@ -283,7 +280,6 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                             r = eval_stmts(env, handler)
                             if r is not None:
                                 return r
-            # TODO: fix for super
             case SClass(name, super, fields, methods):
                 match super:
                     case None:

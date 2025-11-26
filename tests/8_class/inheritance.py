@@ -15,10 +15,14 @@ class Point3d(Point2d):
 def get_x (p: Point2d) -> int:
     return p.x
 
-p2 = Point2d(9, 12)
-print(get_x(p2))
-print(p2.magnitude())
-p3 = Point3d(1, 2, 3)
-print(get_x(p3))
-print(p3.magnitude())
+def test() -> None:
+    p2 = Point2d(9, 12)
+    print(get_x(p2))
+    print(p2.magnitude())
+    p3 = Point3d(1, 2, 3)
+    print(get_x(p3))
+    print(p3.magnitude())
+    return None
+
+test()
 
