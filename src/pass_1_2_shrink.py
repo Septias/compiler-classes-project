@@ -5,10 +5,9 @@ from identifier import *
 from util.immutable_list import *
 
 def shrink(p: src.Program) -> tgt.Program:
-    new_decls = IList([shrink_decl(d) for d in p.decls])
     # convert the class and method definitions
     class_funs = shrink_classes(p.classes)
-
+    new_decls = IList([shrink_decl(d) for d in p.decls])
     # Add the top-level statements to a function called `program_main`
     program_main_body = shrink_stmts(p.main_body)
     program_main = tgt.DFun(tgt.Id("program_main"), ilist(), program_main_body)
@@ -44,24 +43,58 @@ def shrink_classes(cc: IList[src.SClass]) -> IList[tgt.DFun]:
         all_funs.extend(shrink_class(c))
     return IList(all_funs)
 
+# gets a TClass and returns a list of unique method names
+def method_override_resolution(t: TClass) -> IList[Id]:
+    res = []
+    match t:
+        case TClass(_, base, _, methods):
+            res = [m[0] for m in methods]
+            while base is not None:
+                match base:
+                    case TClass(_, new_base, _, new_methods):
+                        for nm, _ in new_methods:
+                            if nm in res:
+                                continue
+                            res = [nm] + res
+                        base = new_base
+                    case _:
+                        base = None
+        case _:
+            raise TypeError(f"tried to find class method structure of illegal type {t}")
+    return IList(res)
+
 def shrink_class(c: src.SClass) -> list[tgt.DFun]:
     class_constructors = []
     class_methods = []
     match c:
         case src.SClass(name, base, fields, methods):
             closures = []
+            methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
+            class_type = TClass(name, base, fields, IList(methods_types))
+            unique_method_names = method_override_resolution(class_type)
             for method in methods:
                 shrunk = shrink_decl(method)
                 method_to_fun_name = name.name + "$" + shrunk.name.name
                 shrunken = tgt.DFun(Id(method_to_fun_name), shrunk.params, shrunk.body)
                 class_methods.append(shrunken)
-                closures.append(tgt.EVar(Id(method_to_fun_name)))
+            for method_name in unique_method_names:
+                # search in which class method_name was last overridden and insert closure 
+                current = class_type
+                while current is not None:
+                    match current:
+                        case TClass(current_name, current_base, _, current_methods):
+                            if method_name in [cm[0] for cm in current_methods]:
+                                closures.append(tgt.EVar(Id(current_name.name + "$" + method_name.name)))
+                                break
+                            current = current_base
+                        case _:
+                            current = None
             class_obj = tgt.ETuple(IList(closures))
             ids = []
             while base is not None:
                 match base:
                     case TClass(_, new_super, super_fields, _):
-                        # new ones in front as we go from child to parent class
+                        # new ids in front as we go from child to parent class
                         ids = [super_field[0] for super_field in super_fields] + ids
                         base = new_super
                     case TBool() | TInt():
@@ -104,7 +137,6 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
                     # 1: inside a method - self is set to the first argument (is that enough?)
                     # 2: outside one - the variable can be processed like any other
                     return tgt.SAssign(shrink_expr(x), e)
-                    raise NotImplementedError("Assignments to member variables does not work yet")
         case src.SIf(e, b1, b2):
             e = shrink_expr(e)
             b1 = shrink_stmts(b1)
@@ -177,7 +209,7 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
             class_type = e.type # type: ignore
             ids = []
             match class_type:
-                case TClass(name, base, fields, _):
+                case TClass(_, base, _, _):
                     while base is not None:
                         match base:
                             case TClass(_, new_super, super_fields, _):
@@ -195,11 +227,10 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                     i += 1
                 return tgt.ETupleAccess(shrink_expr(expr), i + 1)
             else:
-                raise RuntimeError(f"Broken pipeline: field {name} does not exist for {class_type}")
-        # TODO: inheritance
+                raise RuntimeError(f"Broken pipeline: field {name} does not exist for {class_type} in {e}")
         case src.EMethod(expr, name, args):
             class_type = e.type # type: ignore
-            method_ids = [f[0]for f in class_type.methods]
+            method_ids = method_override_resolution(class_type)
             if name in method_ids:
                 i = 0
                 for method_name in method_ids:
@@ -214,3 +245,5 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                 for arg in args:
                     new_args.append(shrink_expr(arg))
                 return tgt.ECall(method, IList(new_args))
+            else:
+                raise Exception(f"could not find called method {name}")

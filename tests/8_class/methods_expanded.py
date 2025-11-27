@@ -34,3 +34,5 @@ print(r.blue)
 r.makemoreblueandred(6)
 print(r.blue)
 print(r.red)
+r.red = 15
+print(r.red)

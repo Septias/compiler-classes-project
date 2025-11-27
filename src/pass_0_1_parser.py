@@ -151,10 +151,16 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                 bcl = bases[0]
                 match bcl:
                     case ast.Name(bcn):
-                        bcni = Id(bcn)
-                        if bcni not in ctx.keys():
-                            raise TypeError(f"class {bcni} could not be found")
-                        baseclass = ctx[bcni]
+                        # as primitives are not classes we need to check them here individually
+                        if bcn == "int":
+                            baseclass = TInt()
+                        elif bcn == "bool":
+                            baseclass = TBool()
+                        else:
+                            bcni = Id(bcn)
+                            if bcni not in ctx.keys():
+                                raise TypeError(f"class {bcni} could not be found or inherited from")
+                            baseclass = ctx[bcni]
                         # copy the fields we have in the base class
                         # params.extend(baseclass.fields)
                     case _:
@@ -193,7 +199,7 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                     case _:
                         raise UnsupportedFeature(classop)
             methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
-            ctx[Id(name)] = TClass(Id(name), baseclass,IList(params), IList(methods_types))
+            ctx[Id(name)] = TClass(Id(name), baseclass, IList(params), IList(methods_types))
             return SClass(Id(name), baseclass, IList(params), IList(methods))
         case ast.Attribute(e, id):
             return EField(map_node(e, ctx), Id(id))

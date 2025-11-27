@@ -201,26 +201,42 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
                 case _:
                     raise Exception(f"Tried field access on non-object {obj}")
         # to interpret method calls
-        # TODO: we need to eval the args before passing, as apply_fun expects a Value
         case EMethod(e, name, args):
             obj = eval_expr(env, e)
+            def find_method_and_class(env: RTEnv, vclass: VClass, name: Id) -> tuple[VFunction, VClass] | None:
+                for method in vclass.methods:
+                    match method:
+                        case VFunction(method_name, _, _, _): 
+                            if method_name == name:
+                                return (method, vclass)
+                        case _:
+                            continue
+                if vclass.super is not None:
+                    super_tclass = vclass.super
+                    try:
+                        super_vclass = lookup(env, super_tclass.name) 
+                        return find_method_and_class(env, super_vclass, name)
+                    except Exception as e:
+                        raise Exception(f"Error looking up superclass {super_tclass.name}: {e}")
+                return None
             match obj:
                 case VObject(classref, fields):
-                    for method in classref.methods:
-                        match method:
-                            case VFunction() if name == method.name:
-                                evals = []
-                                evals.append(obj)
-                                for arg in args:
-                                    evals.append(eval_expr(env, arg))
-                                args = tuple(evals)
-                                return apply_fun(method, args)
-                            case _:
-                                raise Exception("method is not callable")
-                    raise Exception(f"Could not find the method {name} in class {classref.name}")
-                case _:
-                    raise Exception("Method Call on non-class object")
 
+                    method_info = find_method_and_class(env, classref, name)
+
+                    if method_info is not None:
+                        method, _ = method_info
+                        evals = []
+                        for arg in args:
+                            evals.append(eval_expr(env, arg))
+                        rargs = (obj,) + tuple(evals)
+                        return apply_fun(method, rargs) 
+                    else:
+                        raise Exception(f"Method '{name}' not found on class '{classref.name}' or its ancestors.")
+                    
+                case _:
+                    raise Exception(f"Cannot call method '{name}' on non-class object {obj}")
+                        
         # case EArity(expr):
         #     v = eval_expr(env, expr)
         #     match v:

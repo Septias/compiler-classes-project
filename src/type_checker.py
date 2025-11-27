@@ -20,9 +20,9 @@ def type_check(p: Program):
     match p:
         case Program(classes, defs, body):
             ctx: TCtx = dict()
+            type_check_stmts(ctx, classes)
             for d in defs:
                 type_declare_def(ctx, d)
-            type_check_stmts(ctx, classes)
             for d in defs:
                 type_check_def(ctx, d)
             type_check_stmts(ctx, body)
@@ -68,6 +68,7 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             match x:
                 case EField(e, tfieldname):
                     ty = type_check_expr(ctx, e)
+                    x.type = ty
                     match ty:
                         case TClass(classname, base, fields, methods):
                             for fieldname, fieldtype in fields:
@@ -114,7 +115,6 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             ctx[x] = TInt()
             rh = type_check_stmts(ctx, handler)
             return rb and rh
-        # TODO: check if this is correct
         case SClass(name, base, fields, methods):
             if name in ctx:
                 raise TypeError(f"the name {name} is already in use for a class or function")
@@ -232,7 +232,6 @@ def type_annotate_method_expr(e: Expr, class_type: TClass):
             type_annotate_method_expr(expr, class_type)
             for expr in args:
                 type_annotate_method_expr(expr, class_type)
-
 
 # infer type of an expression        
 def type_check_expr(ctx: TCtx, e: Expr) -> Type:
@@ -366,15 +365,27 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                     case TCallable() | TTuple() | TNone():
                         raise TypeError(f"Illegal parent type for {exprtype}")
             raise NameError(f"Cannot find a field with the name {fieldname} in class {exprtype}")
-        # TODO: can currently not check base/super methods
         case EMethod(expr, name, args):
             exprtype = type_check_expr(ctx, expr)
             match exprtype:
                 case TClass(classname, base, fields, methods):
-                    if len(methods) == 0:
+                    # go from neares class (self) to most distance parent class
+                    seen = [m[0] for m in methods]
+                    all_methods = [m for m in methods]
+                    while base is not None:
+                        match base:
+                            case TClass(scname, scbase, _, scmethods):
+                                for scmethod in scmethods:
+                                    if scmethod[0] not in seen:
+                                        seen.append(scmethod[0])
+                                        all_methods.append(scmethod)
+                                base = scbase
+                            case _:
+                                base = None
+                    if len(all_methods) == 0:
                         raise TypeError(f"could not find any methods associated with {classname}")
                     e.type = exprtype
-                    for mname, mtype in methods:
+                    for mname, mtype in all_methods:
                         if mname == name:
                             m_arg_types = mtype.param_tys[1:]
                             if len(args) != len(m_arg_types):
@@ -414,9 +425,6 @@ def check_expr(ctx: TCtx, e: Expr, ty: Type):
             te = type_check_expr(ctx, e)
             check_type_equal(te, ty, e)
 
-
-# Type Equality
-# here we check for tansitive subtyping
 # TODO: expect can be primitive if inherited from e.g. int
 def check_type_equal(thave: Type, texpect: Type, es: Expr | Stmt):
     match (thave, texpect):
