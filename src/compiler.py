@@ -83,10 +83,10 @@ if verbose:
 try:
     ast = parse(src_str)
 except ParseError as err:
-    print(err)
+    print(f"an error occured: {err}")
     exit(1)
 if verbose:
-    print(f"{ast}\n\n{ast_1_python.pretty(ast)}")
+    print(ast_1_python.pretty(ast))
 
 if verbose:
     print("\n===== TYPE CHECKING =====\n")

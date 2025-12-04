@@ -203,7 +203,7 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
         # to interpret method calls
         case EMethod(e, name, args):
             obj = eval_expr(env, e)
-            def find_method_and_class(env: RTEnv, vclass: VClass, name: Id) -> tuple[VFunction, VClass] | None:
+            def find_method_and_class(env: RTEnv, vclass: VClass, name: Id) -> Optional[tuple[VFunction, VClass]]:
                 for method in vclass.methods:
                     match method:
                         case VFunction(method_name, _, _, _): 
@@ -335,7 +335,6 @@ def eval_prog(p: Program):
         eval_stmts(env, p.classes)
     except UserException as e:
         print(e.value)
-    print(f"successful class eval. env: {env}")
     eval_decls(env, p.decls)
     try:
         eval_stmts(env, p.main_body)

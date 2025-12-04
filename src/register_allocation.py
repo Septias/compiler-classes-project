@@ -160,7 +160,7 @@ def liveness_analysis(p: src.Blocks, cfg: DirectedGraph[Label]) -> FunLiveness:
         if cur_live_out != prev_live_block_in:
             liveness[label].block_in = cur_live_out
             worklist.extend(cfg.neighbors_in(label))
-    debug_print_liveness(liveness, p)
+    # debug_print_liveness(liveness, p)
     return liveness
 
 def debug_print_liveness(liveness: FunLiveness, p: src.Blocks):

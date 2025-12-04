@@ -49,8 +49,12 @@ def pretty_type(t: Type) -> str:
             return f"tuple[{pretty_types(ts)}]"
         case TCallable(param_tys, ret_ty):
             return f"Callable[[{pretty_types(param_tys)}], {pretty_type(ret_ty)}]"
-        case TClass(name, fields, methods):
-            return f"Class{name}, {fields}, {methods}"
+        case TClass(name, super, fields, methods):
+            match super:
+                case None:
+                    return f"Class {name}"
+                case _:
+                    return f"Class {name} ({pretty_type(super)})"
 
 def pretty_types(ts: IList[Type]) -> str:
     return ", ".join(pretty_type(t) for t in ts)

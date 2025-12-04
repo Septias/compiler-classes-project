@@ -64,33 +64,40 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             check_type_equal(te, TInt(), e)
             return False
         case SAssign(x, t, e):
-            te = type_check_expr(ctx, e)
-            match x:
-                case EField(e, tfieldname):
-                    ty = type_check_expr(ctx, e)
-                    x.type = ty
-                    match ty:
-                        case TClass(classname, base, fields, methods):
-                            for fieldname, fieldtype in fields:
-                                if tfieldname == fieldname:
-                                    check_type_equal(te, fieldtype, s)
-                        case _:
-                            raise TypeError(f"can not access field of type {ty}")
-                    return False
-                case Id(_):
-                    if t is None:
+            if t is None:
+                te = type_check_expr(ctx, e)
+                match x:
+                    case EField(ex, tfieldname):
+                        ty = type_check_expr(ctx, ex)
+                        x.type = ty
+                        match ty:
+                            case TClass(classname, base, fields, methods):
+                                for fieldname, fieldtype in fields:
+                                    if tfieldname == fieldname:
+                                        check_type_equal(te, fieldtype, s)
+                            case _:
+                                raise TypeError(f"can not access field of type {ty}")
+                        return False
+                    case Id(_):
                         if x in ctx:
                             check_type_equal(te, ctx[x], s)
                         else:
                             ctx[x] = te
                         return False
-                    else:
+                    case _:
+                        raise TypeError(f"can not assign {e} to {x}")
+            # t is not None, meaning the rhs is with type annotation
+            else:
+                match x:
+                    case Id(_):
                         if x in ctx:
                             check_type_equal(t, ctx[x], s)
                         else:
                             ctx[x] = t
-                        check_expr(ctx, e, t)
-                        return False
+                            check_expr(ctx, e, t)
+                            return False
+                    case _:
+                        raise TypeError(f"can not assign {e} to {x}")
         case SIf(test, body, orelse):
             ttest = type_check_expr(ctx, test)
             check_type_equal(ttest, TBool(), test)
@@ -121,6 +128,8 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             fieldnames = []
             # make insurances over the base class
             match base:
+                case None:
+                    pass
                 case TClass(parentname, _, parentfields, parentmethods):
                     if name == parentname:
                         raise TypeError(f"Class {name} can not inherit from itself")
@@ -131,8 +140,8 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                     fieldnames.extend([field[0] for field in parentfields])
                 case TNone() | TTuple() | TCallable() as obj:
                     raise TypeError(f"Type {type(obj).__name__} is not an acceptable base type")
-                case TBool() | TInt() | None:
-                    pass
+                case TBool() | TInt():
+                    raise TypeError(f"{name} tries to inherit from a primitive type but this is forbidden")
             for fieldname, _ in fields:
                 if fieldname in fieldnames:
                     raise NameError(f"multiple use of {fieldname} for name of field in class {name}")
@@ -335,8 +344,6 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                             case TClass(_, new_super, new_fields, _):
                                 membervars += len(new_fields)
                                 super = new_super
-                            case TBool() | TInt():
-                                super = None
                             case _:
                                 raise TypeError(f"{name} has illegal super {super}")
                     if len(es) != membervars + len(fields):
@@ -425,7 +432,7 @@ def check_expr(ctx: TCtx, e: Expr, ty: Type):
             te = type_check_expr(ctx, e)
             check_type_equal(te, ty, e)
 
-# TODO: expect can be primitive if inherited from e.g. int
+# TODO: texpect can be primitive if inherited from e.g. int
 def check_type_equal(thave: Type, texpect: Type, es: Expr | Stmt):
     match (thave, texpect):
         case (TClass(_, _, _, _), TClass(_, _, _, _)):

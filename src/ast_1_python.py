@@ -209,7 +209,6 @@ def pretty_stmt(s: Stmt) -> str:
                     f"{indent(pretty_stmts(body))}\n" \
                     f"except {x}:\n" \
                     f"{indent(pretty_stmts(s_except))}"
-        # TODO: add methods
         case SClass(name, base, fields, methods):
             field_str = "\n".join(f"{x}: {pretty_type(t)}" for (x, t) in fields)
             basestr = ""

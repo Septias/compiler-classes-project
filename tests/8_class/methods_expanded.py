@@ -22,6 +22,8 @@ class RGB:
         self.red = self.red + m
         return None
 
+    def changebutnoreturn(self, m: int) -> None:
+        self.red = m
 
 r = RGB(100, 24, 2)
 print(r.intensity())
@@ -36,3 +38,7 @@ print(r.blue)
 print(r.red)
 r.red = 15
 print(r.red)
+
+g = RGB(2, 2, 2)
+g.changebutnoreturn(5)
+print(g.red)

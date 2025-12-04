@@ -126,16 +126,7 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
                 case Id(_):
                     return tgt.SAssign(x, e)
                 case src.EField(expr, name):
-                    # TODO: we need to assign/override the value inside the tuple with a new one
-                    # how: we already have a way to write inside a tuple when it is being allocated (pass_5_6)
-                    # idea: have subscript assignments (e.g. x[5] = 1), as they functionally do the same thing.
-                    # it boils down to: find heap memory address and write into it.
-                    # we already have subscript assignment in pass 3_4 to deal with assignment conversion in regards to lambdas with free variables
-                    # idea: convert this SAssign with efield on the lhs to a form compatible with LSubscript (needs expr and offset)
-                    # we can get the offset by counting at which point in the tuple the field is located
-                    # ALSO: this can occur in multiple places: 
-                    # 1: inside a method - self is set to the first argument (is that enough?)
-                    # 2: outside one - the variable can be processed like any other
+                    # TODO: check type
                     return tgt.SAssign(shrink_expr(x), e)
         case src.SIf(e, b1, b2):
             e = shrink_expr(e)
