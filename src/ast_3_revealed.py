@@ -158,7 +158,11 @@ def pretty_stmt(s: Stmt) -> str:
         case SExpr(e):
             return pretty_expr(e)
         case SAssign(x, e):
-            return str(x) + " = " + pretty_expr(e)
+            match x:
+                case Id(_):
+                    return str(x) + " = " + pretty_expr(e)
+                case _:
+                    return pretty_expr(x) + " = " + pretty_expr(e)
         case SPrint(e):
             return "print(" + pretty_expr(e) + ")"
         case SIf(test, body, orelse):
