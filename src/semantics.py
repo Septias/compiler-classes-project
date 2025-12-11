@@ -221,9 +221,7 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
                 return None
             match obj:
                 case VObject(classref, fields):
-
                     method_info = find_method_and_class(env, classref, name)
-
                     if method_info is not None:
                         method, _ = method_info
                         evals = []
@@ -231,6 +229,13 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
                             evals.append(eval_expr(env, arg))
                         rargs = (obj,) + tuple(evals)
                         return apply_fun(method, rargs) 
+                    # check if we have a membervariable with the given name of type VFunction (ELambda)
+                    elif name in fields.keys():
+                        evals = []
+                        for arg in args:
+                            evals.append(eval_expr(env, arg))
+                            rargs = tuple(evals)
+                            return apply_fun(fields[name], rargs)
                     else:
                         raise Exception(f"Method '{name}' not found on class '{classref.name}' or its ancestors.")
                     

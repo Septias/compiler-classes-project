@@ -119,7 +119,7 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
                 case src.EField(expr, name):
                     shrunk = shrink_expr(x)
                     match shrunk:
-                        case Id() | tgt.ETupleAccess():
+                        case tgt.ETupleAccess():
                             return tgt.SAssign(shrunk, e)
                         case _:
                             raise Exception(f"can not assign to {expr}")
@@ -193,18 +193,7 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         # END
         case src.EField(expr, name):
             class_type = e.type # type: ignore
-            ids = []
-            match class_type:
-                case TClass(_, base, _, _):
-                    while base is not None:
-                        match base:
-                            case TClass(_, new_super, super_fields, _):
-                                # new ones in front as we go from child to parent class
-                                ids = [super_field[0] for super_field in super_fields] + ids
-                                base = new_super
-                            case TBool() | TInt():
-                                base = None
-            field_ids = ids + [f[0]for f in class_type.fields]
+            field_ids, _ = unique_member_resolution(class_type)
             if name in field_ids:
                 i = 0
                 for field_name in field_ids:
@@ -213,10 +202,9 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                     i += 1
                 return tgt.ETupleAccess(shrink_expr(expr), i + 1)
             else:
-                raise RuntimeError(f"Broken pipeline: field {name} does not exist for {class_type} in {e}")
+                raise Exception(f"Broken pipeline: field {name} does not exist for {class_type} in {e}")
         case src.EMethod(expr, name, args):
             # TODO: this can be a call to a member variable of type Callable.
-            # filter these out before continuing
             class_type = e.type # type: ignore
             field_ids, method_ids = unique_member_resolution(class_type)
             if name in method_ids:
@@ -233,7 +221,20 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                 for arg in args:
                     new_args.append(shrink_expr(arg))
                 return tgt.ECall(method, IList(new_args))
+            # we did not find the called object in the methods, so we look in the fields to check if we have a Callable with name here
+            elif name in field_ids:
+                i = 0
+                for field_name in field_ids:
+                    if field_name == name:
+                        break
+                    i += 1
+                # here we need to access the member variable in the tuple of the object (NOT the class object) and call the ELambda there
+                # (index + 1) as first obj in tuple is class obj
+                callable_member = tgt.ETupleAccess(shrink_expr(expr), i + 1)
+                new_args = []
+                for arg in args:
+                    new_args.append(shrink_expr(arg))
+                return tgt.ECall(callable_member, IList(new_args))
+            # could not find it anywhere - can not generate code
             else:
-                # we did not find it in the methods, so we look in the fields to check if we have a Callable of the name here
-
                 raise Exception(f"could not find called method {name}")

@@ -37,11 +37,11 @@ class C(B):
         f: Callable[[int], int] = lambda z: x + y + z
         self.a = f(g)
 
-#class F(A):
-#    f: Callable[[int], int]
+class F(A):
+    f: Callable[[int], int]
 
-#    def apply_f(self) -> int:
-#        return self.f(self.a)
+    def apply_f(self) -> int:
+        return self.f(self.a)
 
 ca = A(3)
 print(ca.ab(2)) # 5
@@ -70,6 +70,6 @@ print(l.lamtest(1)) # 12
 l.lamassign(12)
 print(l.a) # 27
 
-#double_it: Callable[[int], int] = lambda z: z + z
-#f = F(2, double_it)
-#print(f.apply_f()) # 4
+double_it: Callable[[int], int] = lambda z: z + z
+f = F(2, double_it)
+print(f.apply_f()) # 4
