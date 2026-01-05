@@ -377,15 +377,27 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
             match exprtype:
                 case TClass(classname, base, fields, methods):
                     # go from neares class (self) to most distance parent class
-                    seen = [m[0] for m in methods]
+                    seen_methods = [m[0] for m in methods]
                     all_methods = [m for m in methods]
+                    for field in fields:
+                        if field[0] not in seen_methods:
+                            match field[1]:
+                                case TCallable():
+                                    seen_methods.append(field[0])
+                                    all_methods.append(field)
                     while base is not None:
                         match base:
-                            case TClass(scname, scbase, _, scmethods):
+                            case TClass(scname, scbase, scfields, scmethods):
                                 for scmethod in scmethods:
-                                    if scmethod[0] not in seen:
-                                        seen.append(scmethod[0])
+                                    if scmethod[0] not in seen_methods:
+                                        seen_methods.append(scmethod[0])
                                         all_methods.append(scmethod)
+                                for scfield in scfields:
+                                    if scmethod[0] not in seen_methods:
+                                        match scfield[1]:
+                                            case TCallable():
+                                                seen_methods.append(scfield[0])
+                                                all_methods.append(scfield)
                                 base = scbase
                             case _:
                                 base = None
@@ -394,17 +406,24 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                     e.type = exprtype
                     for mname, mtype in all_methods:
                         if mname == name:
-                            m_arg_types = mtype.param_tys[1:]
+                            # this is only the case, if we have a static method (Lambda member variable) which takes no args
+                            if len(mtype.param_tys) == 0:
+                                m_arg_types = IList([])
+                            else:
+                                # is the first arguemnt self (thus a TClass)? -> if not we also have a static method
+                                match mtype.param_tys[0]:
+                                    case TClass():
+                                        m_arg_types = mtype.param_tys[1:]
+                                    case _:
+                                        m_arg_types = mtype.param_tys
                             if len(args) != len(m_arg_types):
                                 raise TypeError(f"{classname}.{name} expected {len(m_arg_types)} arguments but got {len(args)}")
                             # check argument types
                             for i, arg in enumerate(args):
                                 arg_ty = type_check_expr(ctx, arg)
-                                if arg_ty != m_arg_types[i]:
-                                    raise TypeError(f"expected type {m_arg_types[i]} but got type {arg_ty} in method {classname}.{name}")
+                                check_type_equal(arg_ty, m_arg_types[i], e)
                             return mtype.ret_ty
-                    else:
-                        raise NameError(f"could not find method {name}")
+                    raise NameError(f"could not find method {name}")
                 case _:
                     raise TypeError(f"expected class type but got {exprtype}")
         # case EArity(e):
