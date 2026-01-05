@@ -86,6 +86,7 @@ except ParseError as err:
     print(f"an error occured: {err}")
     exit(1)
 if verbose:
+    print(ast)
     print(ast_1_python.pretty(ast))
 
 if verbose:
