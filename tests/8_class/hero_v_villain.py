@@ -56,18 +56,36 @@ def simulate_round(e: Entity, dmg: int) -> None:
             e.pos = (e.pos[0] - 1, e.pos[1])
         e.steps_to_take = e.steps_to_take - 1
 
-p = Player(1, 100, 1, 5, (0, 0), 50)  # ID, HP, Pos, Mana
+p = Player(1, 100, 2, 5, (0, 0), 50)  # ID, HP, dir, steps, Pos, Mana
 b = Boss(2, 200, 3, 3, (10, 10), True, True)
-player_dmg_output = input_int()
-boss_dmg_output = input_int()
-simulate_round(p, boss_dmg_output)
-simulate_round(b, player_dmg_output)
+# player
 print(p.hp)
 print(p.direction)
 print(p.steps_to_take)
 print(p.pos[0])
 print(p.pos[1])
 print(p.mana)
+# boss
+print(b.hp)
+print(b.direction)
+print(b.steps_to_take)
+print(b.pos[0])
+print(b.pos[1])
+#print(b.is_angry)
+#print(b.shield_up)
+
+player_dmg_output = 45
+boss_dmg_output = 6
+simulate_round(p, boss_dmg_output)
+simulate_round(b, player_dmg_output)
+# player
+print(p.hp)
+print(p.direction)
+print(p.steps_to_take)
+print(p.pos[0])
+print(p.pos[1])
+print(p.mana)
+# boss
 print(b.hp)
 print(b.direction)
 print(b.steps_to_take)

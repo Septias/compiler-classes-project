@@ -206,9 +206,6 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
         # this is for method calls
         case ast.Call(e, args, keywords) if len(keywords) == 0 and type(e) is ast.Attribute:
             return EMethod(map_node(e.value, ctx), Id(e.attr), map_nodes(args, ctx))
-            # TODO: how to differentiate between method call and call of membervariable lambda?
-            # we cant, as they look identical at point of call (both are attributes)
-            # so keep it EMethod, check what it is during typechecking and then do it in the shrinking pass
         case _:
             raise UnsupportedFeature(node)
 

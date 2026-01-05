@@ -54,6 +54,7 @@ print(cb.ab(2)) # 7
 print(cb.de(1)) # 1 
 print(cb.gu()) # 5
 cb.b = 12
+print(cb.a) # 2
 print(cb.b) # 12
 print(cb.gu()) #14
 

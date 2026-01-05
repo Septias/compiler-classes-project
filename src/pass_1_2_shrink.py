@@ -54,12 +54,16 @@ def unique_member_resolution(t: TClass) -> tuple[IList[Id], IList[Id]]:
             while base is not None:
                 match base:
                     case TClass(_, new_base, new_fields, new_methods):
+                        acf = []
+                        acm = []
                         for nm, _ in new_methods:
                             if nm in res_methods:
                                 continue
-                            res_methods = [nm] + res_methods
+                            acm = acm + [nm]
                         for nf, _ in new_fields:
-                            res_fields = [nf] + res_fields
+                            acf = acf + [nf]
+                        res_methods = acm + res_methods
+                        res_fields = acf + res_fields
                         base = new_base
                     case _:
                         base = None
