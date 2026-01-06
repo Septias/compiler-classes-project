@@ -58,7 +58,7 @@ def unique_member_resolution(t: TClass) -> tuple[IList[Id], IList[Id]]:
                         acm = []
                         for nm, _ in new_methods:
                             if nm in res_methods:
-                                continue
+                                res_methods.remove(nm)
                             acm = acm + [nm]
                         for nf, _ in new_fields:
                             acf = acf + [nf]

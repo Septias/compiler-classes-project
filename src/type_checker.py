@@ -420,8 +420,9 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                                 raise TypeError(f"{classname}.{name} expected {len(m_arg_types)} arguments but got {len(args)}")
                             # check argument types
                             for i, arg in enumerate(args):
-                                arg_ty = type_check_expr(ctx, arg)
-                                check_type_equal(arg_ty, m_arg_types[i], e)
+                                check_expr(ctx, arg, m_arg_types[i])
+                                #arg_ty = type_check_expr(ctx, arg)
+                                #check_type_equal(arg_ty, m_arg_types[i], e)
                             return mtype.ret_ty
                     raise NameError(f"could not find method {name}")
                 case _:
