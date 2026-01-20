@@ -43,6 +43,13 @@ class F(A):
     def apply_f(self) -> int:
         return self.f(self.a)
 
+class G(C):
+    l: bool
+    i: int
+
+    def ge(self) -> int:
+        return self.a + self.b + self.i
+
 ca = A(3)
 print(ca.ab(2)) # 5
 print(ca.de(1)) # 2
@@ -74,3 +81,6 @@ print(l.a) # 27
 double_it: Callable[[int], int] = lambda z: z + z
 f = F(2, double_it)
 print(f.apply_f()) # 4
+
+g = G(12, 8, True, 2)
+print(g.ge()) # 22

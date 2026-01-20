@@ -83,8 +83,6 @@ def apply_fun(f: Value, xs: tuple[Value, ...]) -> Optional[Value]:
                     case TClass(_, super_super, super_fieldnames, _):
                         fieldnames = IList([superfield[0] for superfield in super_fieldnames]) + fieldnames
                         super = super_super
-                    case TBool() | TInt():
-                        super = None
                     case _:
                         raise TypeError(f"impossible parent type found at runtime: {super}")
             counts = Counter(fieldnames)

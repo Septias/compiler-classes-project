@@ -90,7 +90,7 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                 # variable != self
                 case [ast.Name(x)] if x != "self":
                     return SAssign(Id(x), None, map_node(value, ctx))
-                # attribute (presumably of class obj - will be checked in the type checker)
+                # attribute
                 case [ast.Attribute(e, id)]:
                     return SAssign(EField(map_node(e, ctx), Id(id)), None, map_node(value, ctx))
                 case _:
@@ -176,7 +176,7 @@ def map_node(node: ast.AST, ctx: Cctx) -> Any:
                         params.append((Id(id), ty))
                     case ast.FunctionDef(mname, margs, mbody, _, mreturns, _, _):
                         # we need to handle the self here
-                        method_params = []
+                        method_params: list[tuple[Id, Type]] = []
                         for arg in margs.args:
                             if arg.annotation is None:
                                 # if arg is self, we do not need a type annotation

@@ -70,14 +70,18 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                     case EField(ex, tfieldname):
                         ty = type_check_expr(ctx, ex)
                         x.type = ty
-                        match ty:
-                            case TClass(classname, base, fields, methods):
-                                for fieldname, fieldtype in fields:
-                                    if tfieldname == fieldname:
-                                        check_type_equal(te, fieldtype, s)
-                            case _:
-                                raise TypeError(f"can not access field of type {ty}")
-                        return False
+                        super = ty
+                        while super is not None:
+                            match super:
+                                case TClass(_, new_super, fields, _):
+                                    for fieldname, fieldtype in fields:
+                                        if tfieldname == fieldname:
+                                            check_type_equal(te, fieldtype, s)
+                                            return False
+                                    super = new_super
+                                case _:
+                                    raise TypeError(f"can not access field of type {ty}")    
+                        raise TypeError(f"cannot assign: field {tfieldname} not found for class {super.name} in {s}")
                     case Id(_):
                         if x in ctx:
                             check_type_equal(te, ctx[x], s)
@@ -122,26 +126,29 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             ctx[x] = TInt()
             rh = type_check_stmts(ctx, handler)
             return rb and rh
-        case SClass(name, base, fields, methods):
+        case SClass(name, super, fields, methods):
             if name in ctx:
                 raise TypeError(f"the name {name} is already in use for a class or function")
             fieldnames = []
             # make insurances over the base class
-            match base:
-                case None:
-                    pass
-                case TClass(parentname, _, parentfields, parentmethods):
-                    if name == parentname:
-                        raise TypeError(f"Class {name} can not inherit from itself")
-                    if parentname not in ctx:
-                        raise TypeError(f"{name} tries to inherit from not defined class {parentname}")
-                    # we can assume that the fields of the parent are unique, as it was already added to ctx and thus checked
-                    # we also assume that field names MUST be unique over inheritance
-                    fieldnames.extend([field[0] for field in parentfields])
-                case TNone() | TTuple() | TCallable() as obj:
-                    raise TypeError(f"Type {type(obj).__name__} is not an acceptable base type")
-                case TBool() | TInt():
-                    raise TypeError(f"{name} tries to inherit from a primitive type but this is forbidden")
+            base = super
+            while base is not None:
+                match base:
+                    case TClass(parentname, new_base, parentfields, parentmethods):
+                        if name == parentname:
+                            raise TypeError(f"Class {name} can not inherit from itself")
+                        if parentname not in ctx:
+                            raise TypeError(f"{name} tries to inherit from not defined class {parentname}")
+                        # we can assume that the fields of the parent are unique, as it was already added to ctx and thus checked
+                        # we also assume that field names MUST be unique over inheritance
+                        fieldnames.extend([field[0] for field in parentfields])
+                        base = new_base
+                    case TNone() | TTuple() | TCallable() as obj:
+                        raise TypeError(f"Type {type(obj).__name__} is not an acceptable base type")
+                    case TBool() | TInt():
+                        raise TypeError(f"{name} tries to inherit from a primitive type but this is forbidden")
+                    case _:
+                        raise TypeError(f"non-allowed type {base} as base of {name}")
             for fieldname, _ in fields:
                 if fieldname in fieldnames:
                     raise NameError(f"multiple use of {fieldname} for name of field in class {name}")
@@ -160,87 +167,15 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                         raise TypeError(f"first argument of method {method.name} from class {name} is not self")     
                 methodnames.append(method.name)
             methods_types = [(method.name, TCallable(IList([a[1] for a in method.params]), method.ret_ty)) for method in methods]
-            class_type = TClass(name, base, fields, IList(methods_types))
+            class_type = TClass(name, super, fields, IList(methods_types))
             ctx[name] = class_type
             # go over all methods again and annotate the selfs
             for method in methods:
                 method.params[0][1].fields = class_type.fields
                 method.params[0][1].methods = class_type.methods
-                for stmt in method.body:
-                    type_annotate_method_stmt(stmt, class_type)
                 type_check_def(ctx, method)
             # return value should only be True if we return from a method or statement
             return False
-
-# these have the job to annotate the TClass to all occurances of self in methods
-def type_annotate_method_stmt(stmt: Stmt, class_type: TClass):
-    match stmt:
-        case SExpr(expr):
-            type_annotate_method_expr(expr, class_type)
-        case SPrint(expr):
-            type_annotate_method_expr(expr, class_type)
-        case SAssign(lhs, _, rhs):
-            match lhs:
-                case EField(_):
-                    type_annotate_method_expr(lhs, class_type)
-            type_annotate_method_expr(rhs, class_type)
-        case SIf(test, body, orelse):
-            type_annotate_method_expr(test, class_type)
-            for s in body:
-                type_annotate_method_stmt(s, class_type)
-            for o in orelse:
-                type_annotate_method_stmt(o, class_type)
-        case SWhile(test, body):
-            for s in body:
-                type_annotate_method_stmt(s, class_type)
-            type_annotate_method_expr(test, class_type)
-        case SReturn(expr):
-            type_annotate_method_expr(expr, class_type)
-        case SRaise(expr):
-            type_annotate_method_expr(expr, class_type)
-        case STry(stry, _, sexcept):
-            for s in stry:
-                type_annotate_method_stmt(s, class_type)
-            for s in sexcept:
-                type_annotate_method_stmt(s, class_type)
-
-def type_annotate_method_expr(e: Expr, class_type: TClass):
-    match e:
-        case EVar(Id("self")):
-            e.type = class_type
-            return
-        case EConst(_):
-            return
-        case EOp1(_, expr):
-            type_annotate_method_expr(expr, class_type)
-        case EOp2(left, _, right):
-            type_annotate_method_expr(left, class_type)
-            type_annotate_method_expr(right, class_type)
-        case EIf(test, body, orelse):
-            type_annotate_method_expr(test, class_type)
-            type_annotate_method_expr(body, class_type)
-            type_annotate_method_expr(orelse, class_type)
-        case ETuple(exprs):
-            for expr in exprs:
-                type_annotate_method_expr(expr, class_type)
-        case ETupleAccess(expr, _):
-            type_annotate_method_expr(expr, class_type)
-        case ETupleLen(expr):
-            type_annotate_method_expr(expr, class_type)
-        case ECall(fun, args):
-            type_annotate_method_expr(fun, class_type)
-            for expr in args:
-                type_annotate_method_expr(expr, class_type)
-        case ELambda(_, expr):
-            type_annotate_method_expr(expr, class_type)
-        case EField(expr, _):
-            e.type = class_type
-            type_annotate_method_expr(expr, class_type)
-        case EMethod(expr, _, args):
-            e.type = class_type
-            type_annotate_method_expr(expr, class_type)
-            for expr in args:
-                type_annotate_method_expr(expr, class_type)
 
 # infer type of an expression        
 def type_check_expr(ctx: TCtx, e: Expr) -> Type:
@@ -347,7 +282,7 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                             case _:
                                 raise TypeError(f"{name} has illegal super {super}")
                     if len(es) != len(membervars):
-                        raise TypeError(f"Constructor of Class {name} called with wrong number of arguments")
+                        raise TypeError(f"Constructor of Class {name} called with wrong number of arguments(got {len(es)}, exprected {len(membervars)})")
                     field_tys = [attr[1] for attr in membervars]
                     for (e, ty) in zip(es, field_tys):
                         check_expr(ctx, e, ty)
@@ -367,9 +302,7 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                             if name == fieldname:
                                 return fieldtype
                         super = new_super
-                    case TInt() | TBool():
-                        raise NameError(f"could not find {fieldname} in {exprtype} or any of its parent classes")
-                    case TCallable() | TTuple() | TNone():
+                    case TInt() | TBool() | TCallable() | TTuple() | TNone():
                         raise TypeError(f"Illegal parent type for {exprtype}")
             raise NameError(f"Cannot find a field with the name {fieldname} in class {exprtype}")
         case EMethod(expr, name, args):
@@ -378,44 +311,44 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                 case TClass(classname, base, fields, methods):
                     # go from neares class (self) to most distance parent class
                     seen_methods = [m[0] for m in methods]
-                    all_methods = [m for m in methods]
+                    # the bool represents origin True = Method, False = member variable lambda
+                    all_methods: list[tuple[tuple[Id, TCallable], bool]] = [(m, True) for m in methods]
                     for field in fields:
                         if field[0] not in seen_methods:
                             match field[1]:
                                 case TCallable():
                                     seen_methods.append(field[0])
-                                    all_methods.append(field)
+                                    all_methods.append((field, False))
                     while base is not None:
                         match base:
                             case TClass(scname, scbase, scfields, scmethods):
                                 for scmethod in scmethods:
                                     if scmethod[0] not in seen_methods:
                                         seen_methods.append(scmethod[0])
-                                        all_methods.append(scmethod)
+                                        all_methods.append((scmethod, True))
                                 for scfield in scfields:
                                     if scmethod[0] not in seen_methods:
                                         match scfield[1]:
                                             case TCallable():
                                                 seen_methods.append(scfield[0])
-                                                all_methods.append(scfield)
+                                                all_methods.append((scfield, False))
                                 base = scbase
                             case _:
                                 base = None
                     if len(all_methods) == 0:
                         raise TypeError(f"could not find any methods associated with {classname}")
                     e.type = exprtype
-                    for mname, mtype in all_methods:
+                    for (mname, mtype), from_method in all_methods:
                         if mname == name:
-                            # this is only the case, if we have a static method (Lambda member variable) which takes no args
+                            # this is only the case, if we have a Lambda member variable which takes no args
                             if len(mtype.param_tys) == 0:
                                 m_arg_types = IList([])
                             else:
-                                # is the first arguemnt self (thus a TClass)? -> if not we also have a static method
-                                match mtype.param_tys[0]:
-                                    case TClass():
-                                        m_arg_types = mtype.param_tys[1:]
-                                    case _:
-                                        m_arg_types = mtype.param_tys
+                                # if it came from a method we remove the implicit self (no need to check, will be inserted in a later compilation step)
+                                if from_method:
+                                    m_arg_types = mtype.param_tys[1:]
+                                else:
+                                    m_arg_types = mtype.param_tys
                             if len(args) != len(m_arg_types):
                                 raise TypeError(f"{classname}.{name} expected {len(m_arg_types)} arguments but got {len(args)}")
                             # check argument types
@@ -452,7 +385,6 @@ def check_expr(ctx: TCtx, e: Expr, ty: Type):
             te = type_check_expr(ctx, e)
             check_type_equal(te, ty, e)
 
-# TODO: texpect can be primitive if inherited from e.g. int
 def check_type_equal(thave: Type, texpect: Type, es: Expr | Stmt):
     match (thave, texpect):
         case (TClass(_, _, _, _), TClass(_, _, _, _)):

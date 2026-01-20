@@ -208,7 +208,7 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
             else:
                 raise Exception(f"Broken pipeline: field {name} does not exist for {class_type} in {e}")
         case src.EMethod(expr, name, args):
-            # TODO: this can be a call to a member variable of type Callable.
+            # this can be a call to a member variable of type Callable.
             class_type = e.type # type: ignore
             field_ids, method_ids = unique_member_resolution(class_type)
             if name in method_ids:
