@@ -308,8 +308,6 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                             lookup(env, n)
                         except:
                             raise Exception(f"parent class {n} could not be found")
-                    case TInt() | TBool():
-                        pass
                     case _:
                         raise Exception(f"parent class {super} can not be inherited from")
                 fieldIds = IList([x[0] for x in fields])
