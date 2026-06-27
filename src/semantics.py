@@ -23,7 +23,7 @@ def simulate_over_and_underflow(i: int) -> int:
 
 # Values
 
-type Value = int | bool | NoneType | VTuple | VFunction | VClass | VObject
+type Value = int | bool | NoneType | VTuple | VFunction | VClass | VObject | VDict
 
 # Value Environment
 
@@ -69,6 +69,17 @@ class VClass:
 class VObject:
     classref: VClass
     fields: dict[Id, Value]
+
+@dataclass
+class VDict:
+    entries: list
+
+def dict_key_equal(a: Value, b: Value) -> bool:
+    match (a, b):
+        case (VTuple(ea), VTuple(eb)):
+            return len(ea) == len(eb) and all(dict_key_equal(x, y) for x, y in zip(ea, eb))
+        case _:
+            return a == b
 
 # Evaluation
 
@@ -176,6 +187,11 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
             match eval_expr(env, e):
                 case VTuple(vs):
                     return vs[i]
+                case VDict(entries):
+                    for ek, ev in entries:
+                        if dict_key_equal(ek, i):
+                            return ev
+                    raise UserException(0)
                 case _:
                     raise Exception("Tried to index into a non-tuple value.")
         case ETupleLen(e):
@@ -198,6 +214,18 @@ def eval_expr(env: RTEnv, e: Expr) -> Value:
                     return fields[name]
                 case _:
                     raise Exception(f"Tried field access on non-object {obj}")
+        case EDict(items):
+            return VDict([(eval_expr(env, k), eval_expr(env, v)) for k, v in items])
+        case EDictAccess(e, key):
+            match eval_expr(env, e):
+                case VDict(entries):
+                    k = eval_expr(env, key)
+                    for ek, ev in entries:
+                        if dict_key_equal(ek, k):
+                            return ev
+                    raise UserException(0)
+                case _:
+                    raise Exception("Dict access on non-dict value")
         # to interpret method calls
         case EMethod(e, name, args):
             obj = eval_expr(env, e)
@@ -269,6 +297,19 @@ def eval_stmts(env: RTEnv, ss: IList[Stmt]) -> Optional[Value]:
                                 fields[name] = res
                             case _:
                                 raise Exception(f"{obj} is not a class object")
+                    case EDictAccess(dict_e, key_e):
+                        match eval_expr(env, dict_e):
+                            case VDict(entries):
+                                k = eval_expr(env, key_e)
+                                v = eval_expr(env, e)
+                                for i, (ek, _) in enumerate(entries):
+                                    if dict_key_equal(ek, k):
+                                        entries[i] = (ek, v)
+                                        break
+                                else:
+                                    entries.append((k, v))
+                            case _:
+                                raise Exception(f"{x} is not a dict")
             case SIf(test, body, orelse):
                 tv = eval_expr(env, test)
                 match eval_stmts(env, body) if tv else eval_stmts(env, orelse):

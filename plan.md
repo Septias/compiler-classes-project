@@ -9,7 +9,7 @@ The project already has full class/OOP support. The next feature is Python `dict
 - GC integration so dict values that are heap objects (tuples, class instances) are correctly traced
 
 **Design decisions:**
-- Keys restricted to `int` (hash stability: pointer keys would be invalidated by GC copying them)
+- Keys can be any type — structural hashing is used so the hash is computed from the *contents* of the key, not its address. This is stable under GC moves.
 - Values can be any type (int, bool, tuple, class instance) — fully GC-traced
 - Dict represented as two GC-managed tuples: a wrapper and a flat backing array
 - Hash logic implemented in `runtime.c`, which directly manipulates GC globals
@@ -29,7 +29,7 @@ Backing array (GC tuple, 3*capacity words after metadata):
 ```
 [metadata: (3*capacity) << 1]
 [flag0: 0 or 2]  ← 0=empty, 2=occupied; GC ignores (LSB=0)
-[key0]           ← tagged int or 0 if empty; GC ignores int values
+[key0]           ← any tagged value; GC traces if heap pointer (LSB=1)
 [val0]           ← any tagged value; GC traces if heap pointer (LSB=1)
 ...              ← repeated for each slot
 ```
@@ -61,10 +61,9 @@ Update:
 - Parse `dict[K, V]` type annotation → `TDict`
 
 ### Step 4: `src/type_checker.py`
-- Type-check `EDict`: infer/validate key type is `TInt`, infer value type from items
-- Type-check `EDictAccess`: verify `e: TDict`, `key: TInt`, return `val_ty`
+- Type-check `EDict`: infer key type from items, infer value type from items; check all keys/values are consistent
+- Type-check `EDictAccess`: verify `e: TDict`, `key` matches `key_ty`, return `val_ty`
 - Type-check `SAssign` with `EDictAccess` LHS: check value type matches `val_ty`
-- Type-check constructor `dict[int, T]()`
 
 ### Step 5: `src/semantics.py`
 - `EDict` → Python `dict` at interpreter level
@@ -145,9 +144,13 @@ int64_t dict_set(int64_t* dict_wrapper, int64_t tagged_key, int64_t tagged_val);
 int64_t dict_has(int64_t* dict_wrapper, int64_t tagged_key);
 ```
 
-Hash function: `tagged_key / 2 % capacity` (untagged int mod capacity).
+Hash function: structural — inspect the tag bit of each word to decide int vs heap pointer:
+- int: hash the integer value directly
+- heap pointer: hash the metadata word (length), then recursively hash each element
 
 Linear probing: probe `(hash + i) % capacity` for `i = 0, 1, 2, ...`.
+
+Key equality: structural — two keys are equal if they have the same type tag and the same contents recursively.
 
 ### Step 10: Add tests in `tests/9_dict/`
 - `basic.py` — create dict, set and get values

@@ -60,8 +60,7 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
             _ = type_check_expr(ctx, e)
             return False
         case SPrint(e):
-            te = type_check_expr(ctx, e)
-            check_type_equal(te, TInt(), e)
+            _ = type_check_expr(ctx, e)
             return False
         case SAssign(x, t, e):
             if t is None:
@@ -88,6 +87,15 @@ def type_check_stmt(ctx: TCtx, s: Stmt) -> bool:
                         else:
                             ctx[x] = te
                         return False
+                    case EDictAccess(dict_e, key_e):
+                        dict_ty = type_check_expr(ctx, dict_e)
+                        match dict_ty:
+                            case TDict(key_ty, val_ty):
+                                check_expr(ctx, key_e, key_ty)
+                                check_type_equal(te, val_ty, s)
+                                return False
+                            case _:
+                                raise TypeError(f"Dict assignment on non-dict type {dict_ty}")
                     case _:
                         raise TypeError(f"can not assign {e} to {x}")
             # t is not None, meaning the rhs is with type annotation
@@ -252,6 +260,9 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                         return ts[i]
                     else:
                         raise TypeError(f"Index {i} is out of bounds for tuple of length {len(ts)}.")
+                case TDict(key_ty, val_ty):
+                    check_type_equal(TInt(), key_ty, e)
+                    return val_ty
                 case t:
                     raise TypeError(f"Tuple access on non-tuple type {t}.")
         case ETupleLen(e):
@@ -291,6 +302,23 @@ def type_check_expr(ctx: TCtx, e: Expr) -> Type:
                     raise TypeError(f"Calling non-function type {t}")
         case ELambda():
             raise TypeError(f"Cannot synthesize type of {pretty_expr(e)}")
+        case EDict(items):
+            if len(items) == 0:
+                raise TypeError("Cannot infer type of empty dict literal; add a type annotation")
+            key_ty = type_check_expr(ctx, items[0][0])
+            val_ty = type_check_expr(ctx, items[0][1])
+            for k, v in items[1:]:
+                check_expr(ctx, k, key_ty)
+                check_expr(ctx, v, val_ty)
+            return TDict(key_ty, val_ty)
+        case EDictAccess(dict_e, key):
+            t = type_check_expr(ctx, dict_e)
+            match t:
+                case TDict(key_ty, val_ty):
+                    check_expr(ctx, key, key_ty)
+                    return val_ty
+                case _:
+                    raise TypeError(f"Dict access on non-dict type {t}")
         case EField(expr, fieldname):
             exprtype = type_check_expr(ctx, expr)
             e.type = exprtype
@@ -381,6 +409,14 @@ def check_expr(ctx: TCtx, e: Expr, ty: Type):
                     check_expr(new_ctx, body, ret_ty)
                 case _:
                     raise TypeError(f"Lambda cannot have type {pretty_type(ty)}")
+        case EDict(items):
+            match ty:
+                case TDict(key_ty, val_ty):
+                    for k, v in items:
+                        check_expr(ctx, k, key_ty)
+                        check_expr(ctx, v, val_ty)
+                case _:
+                    raise TypeError(f"Dict literal cannot have type {pretty_type(ty)}")
         case _:
             te = type_check_expr(ctx, e)
             check_type_equal(te, ty, e)
