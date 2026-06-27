@@ -65,6 +65,8 @@ def limit_lhs(lhs: src.Lhs) -> tgt.Lhs:
             return tgt.LId(x)
         case src.LSubscript(e, i):
             return tgt.LSubscript(limit_expr(e), i)
+        case src.LDictSet(e, key):
+            return tgt.LDictSet(limit_expr(e), limit_expr(key))
 
 def limit_expr(e: src.Expr) -> tgt.Expr:
     match e:
@@ -102,6 +104,10 @@ def limit_expr(e: src.Expr) -> tgt.Expr:
         case src.EBegin(ss, e):
             return tgt.EBegin(limit_stmts(ss), limit_expr(e))
         # END
+        case src.EDict(items):
+            return tgt.EDict(IList([(limit_expr(k), limit_expr(v)) for k, v in items]))
+        case src.EDictAccess(e, key):
+            return tgt.EDictAccess(limit_expr(e), limit_expr(key))
 
 def limit_exprs(es: IList[src.Expr]) -> IList[tgt.Expr]:
     return IList([limit_expr(e) for e in es])
