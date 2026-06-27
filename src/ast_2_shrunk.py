@@ -18,7 +18,8 @@ type Op2 = Literal["+", "-", "==", "!=", "<=", "<", ">", ">="]
 
 type Expr = EConst | EVar | EOp1 | EOp2 | EInput | EIf \
           | ETuple | ETupleAccess | ETupleLen \
-          | ECall | ELambda
+          | ECall | ELambda \
+          | EDict | EDictAccess
 
 @dataclass(frozen=True)
 class EConst:
@@ -73,6 +74,15 @@ class ELambda:
     params: IList[Id]
     body: Expr
 
+@dataclass(frozen=True)
+class EDict:
+    items: IList[tuple[Expr, Expr]]
+
+@dataclass(frozen=True)
+class EDictAccess:
+    e: Expr
+    key: Expr
+
 # Statements
 
 type Stmt = SExpr | SPrint | SAssign | SIf | SWhile | SReturn | SRaise | STry
@@ -87,7 +97,7 @@ class SPrint:
 
 @dataclass(frozen=True)
 class SAssign:
-    lhs: Id | ETupleAccess
+    lhs: Id | ETupleAccess | EDictAccess
     rhs: Expr
 
 @dataclass(frozen=True)
@@ -206,6 +216,11 @@ def pretty_expr(e: Expr) -> str:
             params_str = ", ".join(str(x) for x in params)
             body_str = pretty_expr(body)
             return f"lambda {params_str}: {body_str}"
+        case EDict(items):
+            pairs = ", ".join(f"{pretty_expr(k)}: {pretty_expr(v)}" for k, v in items)
+            return "{" + pairs + "}"
+        case EDictAccess(e, key):
+            return f"{pretty_expr(e)}[{pretty_expr(key)}]"
         case DFun(_):
             return "\n" + pretty_decl(e)
         case _:

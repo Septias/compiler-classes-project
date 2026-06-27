@@ -121,6 +121,8 @@ def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
             match x:
                 case Id(_):
                     return tgt.SAssign(x, e)
+                case src.EDictAccess(dict_e, key_e):
+                    return tgt.SAssign(tgt.EDictAccess(shrink_expr(dict_e), shrink_expr(key_e)), e)
                 case src.EField(expr, name):
                     shrunk = shrink_expr(x)
                     match shrunk:
@@ -196,6 +198,10 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         case src.ELambda(params, body):
             return tgt.ELambda(params, shrink_expr(body))
         # END
+        case src.EDict(items):
+            return tgt.EDict(IList([(shrink_expr(k), shrink_expr(v)) for k, v in items]))
+        case src.EDictAccess(e, key):
+            return tgt.EDictAccess(shrink_expr(e), shrink_expr(key))
         case src.EField(expr, name):
             class_type = e.type # type: ignore
             field_ids, _ = unique_member_resolution(class_type)
