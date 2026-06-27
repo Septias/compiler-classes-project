@@ -24,7 +24,8 @@ type Global = Literal['gc_free_ptr', 'gc_fromspace_end']
 
 type Expr = EConst | EVar | EOp1 | EOp2 | EInput | EIf \
           | ETupleAccess | ETupleLen | EBegin | EAllocate | EGlobal \
-          | ECall | EFunRef
+          | ECall | EFunRef \
+          | EDict | EDictAccess
 
 @dataclass(frozen=True)
 class EConst:
@@ -87,9 +88,18 @@ class ECall:
 class EFunRef:
     fun: Label
 
+@dataclass(frozen=True)
+class EDict:
+    items: IList[tuple['Expr', 'Expr']]
+
+@dataclass(frozen=True)
+class EDictAccess:
+    e: 'Expr'
+    key: 'Expr'
+
 # Left-hand sides of Assign Statements
 
-type Lhs = LId | LSubscript
+type Lhs = LId | LSubscript | LDictSet
 
 @dataclass
 class LId:
@@ -99,6 +109,11 @@ class LId:
 class LSubscript:
     e: Expr
     offset: int
+
+@dataclass
+class LDictSet:
+    e: Expr
+    key: Expr
 
 # Statements
 
@@ -212,6 +227,8 @@ def pretty_lhs(lhs: Lhs) -> str:
             return str(x)
         case LSubscript(e, i):
             return f"{pretty_expr(e)}[{i}]"
+        case LDictSet(e, key):
+            return f"{pretty_expr(e)}[{pretty_expr(key)}]"
 
 def pretty_expr(e: Expr) -> str:
     match e:
@@ -247,3 +264,8 @@ def pretty_expr(e: Expr) -> str:
             return f"{pretty_expr(func)}({args_str})"
         case EFunRef(name):
             return f"{name}"
+        case EDict(items):
+            pairs = ", ".join(f"{pretty_expr(k)}: {pretty_expr(v)}" for k, v in items)
+            return "{" + pairs + "}"
+        case EDictAccess(e, key):
+            return f"{pretty_expr(e)}[{pretty_expr(key)}]"

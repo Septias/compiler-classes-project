@@ -52,6 +52,8 @@ def alloc_lhs(lhs: src.Lhs) -> tgt.Lhs:
             return tgt.LId(x)
         case src.LSubscript(e, i):
             return tgt.LSubscript(alloc_expr(e), i)
+        case src.LDictSet(e, key):
+            return tgt.LDictSet(alloc_expr(e), alloc_expr(key))
 
 def alloc_expr(e: src.Expr) -> tgt.Expr:
     match e:
@@ -125,6 +127,10 @@ def alloc_expr(e: src.Expr) -> tgt.Expr:
         case src.EBegin(ss, e):
             return tgt.EBegin(alloc_stmts(ss), alloc_expr(e))
         # END
+        case src.EDict(items):
+            return tgt.EDict(IList([(alloc_expr(k), alloc_expr(v)) for k, v in items]))
+        case src.EDictAccess(e, key):
+            return tgt.EDictAccess(alloc_expr(e), alloc_expr(key))
 
 def alloc_exprs(es: IList[src.Expr]) -> IList[tgt.Expr]:
     return IList([alloc_expr(e) for e in es])
