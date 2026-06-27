@@ -1,0 +1,15 @@
+
+- Dictionaries fürs Praktikum
+- Neue Klasse an garbage-collector Objekt?
+- Tuple geht davon aus, dass alle Element vom gb inspiziert werden
+	- Werden getagged
+- Hashtable für die Dicts
+	- Maschinerie für Hashtabelle (GC darf nicht rein schauen)
+- Kann man das als normale GC Objekte anlegen?
+- Schritte
+	- Parser
+	- Typen
+	- Interpreter
+- letzte 3 bits der Pointer sind 0
+- Ints sind mit lsb = 1 getagged
+- Woher kommt die Hashfunktion?
