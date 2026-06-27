@@ -45,6 +45,8 @@ def uniquify_stmt(renaming: dict[Id, Id], s: src.Stmt) -> tgt.Stmt:
                     return tgt.SAssign(y, e)
                 case src.ETupleAccess(expr, idx):
                     return tgt.SAssign(tgt.ETupleAccess(uniquify_expr(renaming, expr), idx), uniquify_expr(renaming, e))
+                case src.EDictAccess(dict_e, key_e):
+                    return tgt.SAssign(tgt.EDictAccess(uniquify_expr(renaming, dict_e), uniquify_expr(renaming, key_e)), uniquify_expr(renaming, e))
         case src.SIf(e, b1, b2):
             e = uniquify_expr(renaming, e)
             b1 = uniquify_stmts(renaming, b1)
@@ -104,6 +106,10 @@ def uniquify_expr(renaming: dict[Id, Id], e: src.Expr) -> tgt.Expr:
                 renaming[p] = p_new
                 new_params += ilist(p_new)
             return tgt.ELambda(new_params, uniquify_expr(renaming, body))
+        case src.EDict(items):
+            return tgt.EDict(IList([(uniquify_expr(renaming, k), uniquify_expr(renaming, v)) for k, v in items]))
+        case src.EDictAccess(e, key):
+            return tgt.EDictAccess(uniquify_expr(renaming, e), uniquify_expr(renaming, key))
 
 def uniquify_exprs(renaming: dict[Id, Id], es: IList[src.Expr]) -> IList[tgt.Expr]:
     return IList([uniquify_expr(renaming, e) for e in es])

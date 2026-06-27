@@ -43,6 +43,8 @@ def reveal_stmt(funs: set[Id], s: src.Stmt) -> tgt.Stmt:
                     return tgt.SAssign(x, e)
                 case src.ETupleAccess(expr, idx):
                     return tgt.SAssign(tgt.ETupleAccess(reveal_expr(funs, expr), idx), e)
+                case src.EDictAccess(dict_e, key_e):
+                    return tgt.SAssign(tgt.EDictAccess(reveal_expr(funs, dict_e), reveal_expr(funs, key_e)), e)
         case src.SIf(e, b1, b2):
             e = reveal_expr(funs, e)
             b1 = reveal_stmts(funs, b1)
@@ -100,6 +102,10 @@ def reveal_expr(funs: set[Id], e: src.Expr) -> tgt.Expr:
         case src.ELambda(params, body):
             return tgt.ELambda(params, reveal_expr(funs, body))
         # END
+        case src.EDict(items):
+            return tgt.EDict(IList([(reveal_expr(funs, k), reveal_expr(funs, v)) for k, v in items]))
+        case src.EDictAccess(e, key):
+            return tgt.EDictAccess(reveal_expr(funs, e), reveal_expr(funs, key))
 
 def reveal_exprs(funs: set[Id], es: IList[src.Expr]) -> IList[tgt.Expr]:
     return IList([reveal_expr(funs, e) for e in es])
