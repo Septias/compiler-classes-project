@@ -61,6 +61,8 @@ def closure_conv_lhs(decls_out: list[tgt.Decl], lhs: src.Lhs) -> tgt.Lhs:
             return tgt.LId(x)
         case src.LSubscript(e, i):
             return tgt.LSubscript(closure_conv_expr(decls_out, e), i)
+        case src.LDictSet(e, key):
+            return tgt.LDictSet(closure_conv_expr(decls_out, e), closure_conv_expr(decls_out, key))
 
 def closure_conv_expr(decls_out: list[tgt.Decl], e: src.Expr) -> tgt.Expr:
     match e:
@@ -98,6 +100,10 @@ def closure_conv_expr(decls_out: list[tgt.Decl], e: src.Expr) -> tgt.Expr:
             )
         case src.EFunRef(name):
             return tgt.ETuple(ilist(tgt.EFunRef(name)))
+        case src.EDict(items):
+            return tgt.EDict(IList([(closure_conv_expr(decls_out, k), closure_conv_expr(decls_out, v)) for k, v in items]))
+        case src.EDictAccess(e, key):
+            return tgt.EDictAccess(closure_conv_expr(decls_out, e), closure_conv_expr(decls_out, key))
         case src.ELambda(params, body, fvs):
             fun_name = Label.fresh("lambda")
             closure_name = Id.fresh("closure")
