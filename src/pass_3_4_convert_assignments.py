@@ -58,6 +58,10 @@ def conv_ass_stmt(AF: set[Id], s: src.Stmt) -> tgt.Stmt:
                     lhs = tgt.LSubscript(conv_ass_expr(AF, expr), idx)
                     e = conv_ass_expr(AF, e)
                     return tgt.SAssign(lhs, e)
+                case src.EDictAccess(dict_e, key_e):
+                    lhs = tgt.LDictSet(conv_ass_expr(AF, dict_e), conv_ass_expr(AF, key_e))
+                    e = conv_ass_expr(AF, e)
+                    return tgt.SAssign(lhs, e)
         case src.SIf(e, b1, b2):
             e = conv_ass_expr(AF, e)
             b1 = conv_ass_stmts(AF, b1)
@@ -114,6 +118,10 @@ def conv_ass_expr(AF: set[Id], e: src.Expr) -> tgt.Expr:
         case src.ELambda(params, body):
             body = conv_ass_expr(AF, body)
             return tgt.ELambda(params, body, IList(list(free_vars(e))))
+        case src.EDict(items):
+            return tgt.EDict(IList([(conv_ass_expr(AF, k), conv_ass_expr(AF, v)) for k, v in items]))
+        case src.EDictAccess(e, key):
+            return tgt.EDictAccess(conv_ass_expr(AF, e), conv_ass_expr(AF, key))
 
 def conv_ass_exprs(AF: set[Id], es: IList[src.Expr]) -> IList[tgt.Expr]:
     return IList([conv_ass_expr(AF, e) for e in es])
@@ -144,6 +152,10 @@ def free_vars(e: src.Expr) -> set[Id]:
             return set()
         case src.ELambda(params, body):
             return free_vars(body) - set(params)
+        case src.EDict(items):
+            return set().union(*(free_vars(k) | free_vars(v) for k, v in items))
+        case src.EDictAccess(e, key):
+            return free_vars(e) | free_vars(key)
 
 def free_vars_list(es: IList[src.Expr]) -> set[Id]:
     fvs = set()
@@ -177,6 +189,10 @@ def free_in_lambda(e: src.Expr) -> set[Id]:
             return set()
         case src.ELambda(_, _):
             return free_vars(e)
+        case src.EDict(items):
+            return set().union(*(free_in_lambda(k) | free_in_lambda(v) for k, v in items))
+        case src.EDictAccess(e, key):
+            return free_in_lambda(e) | free_in_lambda(key)
 
 def free_in_lambda_list(es: IList[src.Expr]) -> set[Id]:
     fvs = set()
