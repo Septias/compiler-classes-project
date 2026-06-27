@@ -1,3 +1,4 @@
+# ruff: noqa
 import ast_3_revealed as src
 import ast_4_conv_ass as tgt
 from identifier import Id

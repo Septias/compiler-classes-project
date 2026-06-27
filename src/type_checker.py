@@ -50,7 +50,7 @@ def type_check_def(ctx: TCtx, d: Decl):
 
 def type_check_stmts(ctx: TCtx, ss: IList[Stmt]) -> bool:
     for s in ss:
-        if type_check_stmt(ctx, s):
+        if type_check_stmt(ctx, s): # Todo: only checks one expression, no?
             return True
     return False
 

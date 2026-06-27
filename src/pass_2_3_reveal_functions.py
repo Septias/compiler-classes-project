@@ -1,3 +1,4 @@
+# ruff: noqa
 # The only interesting thing happens in `collect_function_funs` and
 # the variable case of `reveal_expr`.
 

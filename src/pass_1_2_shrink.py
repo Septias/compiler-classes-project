@@ -1,3 +1,4 @@
+# ruff: noqa
 import ast_1_python as src
 import ast_2_shrunk as tgt
 from types_ import *

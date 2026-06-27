@@ -19,7 +19,8 @@ type Op2 = Literal["+", "-", "==", "!=", "<=", "<", ">", ">=", "and", "or", "is"
 
 type Expr = EConst | EVar | EOp1 | EOp2 | EInput | EIf \
           | ETuple | ETupleAccess | ETupleLen \
-          | ECall | ELambda | EField
+          | ECall | ELambda | EField \
+          | EDict | EDictAccess
 
 @dataclass(frozen=True)
 class EConst:
@@ -73,6 +74,15 @@ class ELambda:
     params: IList[Id]
     body: Expr
 
+@dataclass(frozen=True)
+class EDict:
+    items: IList[tuple[Expr, Expr]]
+
+@dataclass(frozen=True)
+class EDictAccess:
+    e: Expr
+    key: Expr
+
 @dataclass # not frozen, as we add the type of e to it in the typechecker!
 class EField:
     e: Expr
@@ -98,7 +108,7 @@ class SPrint:
 
 @dataclass(frozen=True)
 class SAssign:
-    lhs: Id | EField
+    lhs: Id | EField | EDictAccess
     ty: Optional[Type]
     rhs: Expr
 
@@ -179,13 +189,13 @@ def pretty_stmt(s: Stmt) -> str:
         case SExpr(e):
             return pretty_expr(e)
         case SAssign(x, t, e):
-            match x: 
+            match x:
                 case Id(_):
                     if t is None:
                         return f"{x} = {pretty_expr(e)}"
                     else:
                         return f"{x}: {pretty_type(t)} = {pretty_expr(e)}"
-                case EField(_):
+                case EField(_) | EDictAccess():
                     if t is None:
                         return f"{pretty_expr(x)} = {pretty_expr(e)}"
                     else:
@@ -246,6 +256,11 @@ def pretty_expr(e: Expr) -> str:
             return f"{pretty_expr(e)}.{name}"
         case EMethod(e, name, args):
             return f"{pretty_expr(e)}.{name}(" + ", ".join(pretty_expr(a) for a in args) + ")"
+        case EDict(items):
+            pairs = ", ".join(f"{pretty_expr(k)}: {pretty_expr(v)}" for k, v in items)
+            return "{" + pairs + "}"
+        case EDictAccess(e, key):
+            return f"{pretty_expr(e)}[{pretty_expr(key)}]"
 
 def pretty_anything(x: Program | Decl | Stmt | Expr) -> str:
     try:

@@ -3,7 +3,7 @@ import ast_5_closures as tgt
 from identifier import Id
 from label import Label
 from types_ import *
-from util.immutable_list import *
+from util.immutable_list import ilist, IList
 
 # BEGIN
 
