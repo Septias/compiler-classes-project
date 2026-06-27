@@ -5,7 +5,7 @@ from typing import Optional
 
 # Type Syntax
 
-type Type = TBool | TInt | TNone | TTuple | TCallable | TClass
+type Type = TBool | TInt | TNone | TTuple | TCallable | TClass | TDict
 
 @dataclass(frozen=True)
 class TBool:
@@ -35,6 +35,11 @@ class TClass:
     fields: IList[tuple[Id, Type]]
     methods: IList[tuple[Id, TCallable]]
 
+@dataclass(frozen=True)
+class TDict:
+    key_ty: Type
+    val_ty: Type
+
 # Pretty Printing
 
 def pretty_type(t: Type) -> str:
@@ -55,6 +60,8 @@ def pretty_type(t: Type) -> str:
                     return f"Class {name}"
                 case _:
                     return f"Class {name} ({pretty_type(super)})"
+        case TDict(key_ty, val_ty):
+            return f"dict[{pretty_type(key_ty)}, {pretty_type(val_ty)}]"
 
 def pretty_types(ts: IList[Type]) -> str:
     return ", ".join(pretty_type(t) for t in ts)
