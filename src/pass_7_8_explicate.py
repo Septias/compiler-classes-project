@@ -180,6 +180,8 @@ def explicate_lhs(
             return l, tgt.LId(x)
         case src.LSubscript(e, i):
             return l, tgt.LSubscript(explicate_atom(e), i)
+        case src.LDictSet(e, key):
+            return l, tgt.LDictSet(explicate_atom(e), explicate_atom(key))
 
 def explicate_expr(
     out: tgt.Blocks,
@@ -218,6 +220,11 @@ def explicate_expr(
             return l, tgt.ECall(e_func_out, e_args_out)
         case src.EFunRef(name):
             return l, tgt.EFunRef(name)
+        case src.EDict(items):
+            items_out = IList([(explicate_atom(k), explicate_atom(v)) for k, v in items])
+            return l, tgt.EDict(items_out)
+        case src.EDictAccess(e, key):
+            return l, tgt.EDictAccess(explicate_atom(e), explicate_atom(key))
 
 def explicate_atoms(
     es: IList[src.ExprAtom],
