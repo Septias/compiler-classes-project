@@ -25,10 +25,10 @@ def test_dict_access_variable_key():
     assert isinstance(body[2].rhs, EDictAccess)
 
 def test_dict_access_const_key():
-    # constant int key is parsed as ETupleAccess — handled at type check level
+    # constant int key is parsed as ETupleAccess but shrink converts it to EDictAccess
     body = program_main(shrink_prog("d: dict[int, int] = {}\nx = d[1]")).body
-    assert isinstance(body[1].rhs, ETupleAccess)
-    assert body[1].rhs.index == 1
+    assert isinstance(body[1].rhs, EDictAccess)
+    assert body[1].rhs.key.value == 1
 
 def test_dict_assign():
     body = program_main(shrink_prog("k: int = 1\nd: dict[int, int] = {}\nd[k] = 5")).body

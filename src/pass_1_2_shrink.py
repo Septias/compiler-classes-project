@@ -10,7 +10,7 @@ def shrink(p: src.Program) -> tgt.Program:
     class_funs = shrink_classes(p.classes)
     new_decls = IList([shrink_decl(d) for d in p.decls])
     # Add the top-level statements to a function called `program_main`
-    program_main_body = shrink_stmts(p.main_body)
+    program_main_body = shrink_stmts(p.main_body, set())
     program_main = tgt.DFun(tgt.Id("program_main"), ilist(), program_main_body)
     new_decls = new_decls + class_funs
     # Create the real main function which calls the `program_main` in a try-block
@@ -33,10 +33,13 @@ def shrink_decl(d: src.Decl) -> tgt.Decl:
     match d:
         case src.DFun(name, params, _, body):
             params = IList([x for (x, _) in params])
-            return tgt.DFun(name, params, shrink_stmts(body))
+            return tgt.DFun(name, params, shrink_stmts(body, set()))
 
-def shrink_stmts(ss: IList[src.Stmt]) -> IList[tgt.Stmt]:
-    return IList([shrink_stmt(s) for s in ss])
+def shrink_stmts(ss: IList[src.Stmt], dict_vars: set[Id]) -> IList[tgt.Stmt]:
+    result = []
+    for s in ss:
+        result.append(shrink_stmt(s, dict_vars))
+    return IList(result)
 
 def shrink_classes(cc: IList[src.SClass]) -> IList[tgt.DFun]:
     all_funs = []
@@ -106,55 +109,46 @@ def shrink_class(c: src.SClass) -> list[tgt.DFun]:
         case _:
             raise Exception(f"internal error: non-class {c} found during shrinking of class defs")
 
-def shrink_stmt(s: src.Stmt) -> tgt.Stmt:
+def shrink_stmt(s: src.Stmt, dict_vars: set[Id]) -> tgt.Stmt:
     match s:
         case src.SExpr(e):
-            e = shrink_expr(e)
-            return tgt.SExpr(e)
+            return tgt.SExpr(shrink_expr(e, dict_vars))
         case src.SPrint(e):
-            e = shrink_expr(e)
-            return tgt.SPrint(e)
+            return tgt.SPrint(shrink_expr(e, dict_vars))
         # BEGIN
-        case src.SAssign(x, _, e):
+        case src.SAssign(x, ty, e):
         # END
-            e = shrink_expr(e)
+            e = shrink_expr(e, dict_vars)
             match x:
                 case Id(_):
+                    if isinstance(ty, TDict):
+                        dict_vars.add(x)
                     return tgt.SAssign(x, e)
                 case src.EDictAccess(dict_e, key_e):
-                    return tgt.SAssign(tgt.EDictAccess(shrink_expr(dict_e), shrink_expr(key_e)), e)
+                    return tgt.SAssign(tgt.EDictAccess(shrink_expr(dict_e, dict_vars), shrink_expr(key_e, dict_vars)), e)
                 case src.EField(expr, name):
-                    shrunk = shrink_expr(x)
+                    shrunk = shrink_expr(x, dict_vars)
                     match shrunk:
                         case tgt.ETupleAccess():
                             return tgt.SAssign(shrunk, e)
                         case _:
                             raise Exception(f"can not assign to {expr}")
         case src.SIf(e, b1, b2):
-            e = shrink_expr(e)
-            b1 = shrink_stmts(b1)
-            b2 = shrink_stmts(b2)
-            return tgt.SIf(e, b1, b2)
+            return tgt.SIf(shrink_expr(e, dict_vars), shrink_stmts(b1, dict_vars), shrink_stmts(b2, dict_vars))
         case src.SWhile(e, b):
-            e = shrink_expr(e)
-            b = shrink_stmts(b)
-            return tgt.SWhile(e, b)
+            return tgt.SWhile(shrink_expr(e, dict_vars), shrink_stmts(b, dict_vars))
         case src.SReturn(e):
-            e = shrink_expr(e)
-            return tgt.SReturn(e)
+            return tgt.SReturn(shrink_expr(e, dict_vars))
         case src.SRaise(e):
-            e = shrink_expr(e)
-            return tgt.SRaise(e)
+            return tgt.SRaise(shrink_expr(e, dict_vars))
         case src.STry(body, x, handler):
-            body = shrink_stmts(body)
-            handler = shrink_stmts(handler)
-            return tgt.STry(body, x, handler)
+            return tgt.STry(shrink_stmts(body, dict_vars), x, shrink_stmts(handler, dict_vars))
         # class statements should not occur here as they are treated completley seperatley
         case src.SClass(name, _, _, _):
             raise Exception(f"Internal error: encountered class definition of {name} in body.")
 
 
-def shrink_expr(e: src.Expr) -> tgt.Expr:
+def shrink_expr(e: src.Expr, dict_vars: set[Id]) -> tgt.Expr:
     match e:
         case src.EConst(c):
             return tgt.EConst(c, '63bit')
@@ -163,11 +157,10 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
         case src.EInput():
             return tgt.EInput()
         case src.EOp1(op, e1):
-            e1 = shrink_expr(e1)
-            return tgt.EOp1(op, e1)
+            return tgt.EOp1(op, shrink_expr(e1, dict_vars))
         case src.EOp2(e1, op, e2):
-            e1 = shrink_expr(e1)
-            e2 = shrink_expr(e2)
+            e1 = shrink_expr(e1, dict_vars)
+            e2 = shrink_expr(e2, dict_vars)
             match op:
                 case "and":
                     return tgt.EIf(e1, e2, tgt.EConst(False, '63bit'))
@@ -180,28 +173,25 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                 case _:
                     return tgt.EOp2(e1, op, e2)
         case src.EIf(e1, e2, e3):
-            e1 = shrink_expr(e1)
-            e2 = shrink_expr(e2)
-            e3 = shrink_expr(e3)
-            return tgt.EIf(e1, e2, e3)
+            return tgt.EIf(shrink_expr(e1, dict_vars), shrink_expr(e2, dict_vars), shrink_expr(e3, dict_vars))
         case src.ETuple(es):
-            return tgt.ETuple(IList([shrink_expr(e) for e in es]))
+            return tgt.ETuple(IList([shrink_expr(e, dict_vars) for e in es]))
+        case src.ETupleAccess(src.EVar(x), i) if x in dict_vars:
+            return tgt.EDictAccess(tgt.EVar(x), tgt.EConst(i, '63bit'))
         case src.ETupleAccess(e, i):
-            return tgt.ETupleAccess(shrink_expr(e), i)
+            return tgt.ETupleAccess(shrink_expr(e, dict_vars), i)
         case src.ETupleLen(e):
-            return tgt.ETupleLen(shrink_expr(e))
+            return tgt.ETupleLen(shrink_expr(e, dict_vars))
         case src.ECall(e_fun, e_args):
-            e_fun = shrink_expr(e_fun)
-            e_args = IList([shrink_expr(arg) for arg in e_args])
-            return tgt.ECall(e_fun, e_args)
+            return tgt.ECall(shrink_expr(e_fun, dict_vars), IList([shrink_expr(arg, dict_vars) for arg in e_args]))
         # BEGIN
         case src.ELambda(params, body):
-            return tgt.ELambda(params, shrink_expr(body))
+            return tgt.ELambda(params, shrink_expr(body, dict_vars))
         # END
         case src.EDict(items):
-            return tgt.EDict(IList([(shrink_expr(k), shrink_expr(v)) for k, v in items]))
+            return tgt.EDict(IList([(shrink_expr(k, dict_vars), shrink_expr(v, dict_vars)) for k, v in items]))
         case src.EDictAccess(e, key):
-            return tgt.EDictAccess(shrink_expr(e), shrink_expr(key))
+            return tgt.EDictAccess(shrink_expr(e, dict_vars), shrink_expr(key, dict_vars))
         case src.EField(expr, name):
             class_type = e.type # type: ignore
             field_ids, _ = unique_member_resolution(class_type)
@@ -211,7 +201,7 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                     if field_name == name:
                         break
                     i += 1
-                return tgt.ETupleAccess(shrink_expr(expr), i + 1)
+                return tgt.ETupleAccess(shrink_expr(expr, dict_vars), i + 1)
             else:
                 raise Exception(f"Broken pipeline: field {name} does not exist for {class_type} in {e}")
         case src.EMethod(expr, name, args):
@@ -224,28 +214,23 @@ def shrink_expr(e: src.Expr) -> tgt.Expr:
                     if method_name == name:
                         break
                     i += 1
-                clazz = tgt.ETupleAccess(shrink_expr(expr), 0)
-                # this should be an EVar whos name is the name of the method/function
+                clazz = tgt.ETupleAccess(shrink_expr(expr, dict_vars), 0)
                 method = tgt.ETupleAccess(clazz, i)
-                # shrink args, add self first:
-                new_args = [shrink_expr(expr)]
+                new_args = [shrink_expr(expr, dict_vars)]
                 for arg in args:
-                    new_args.append(shrink_expr(arg))
+                    new_args.append(shrink_expr(arg, dict_vars))
                 return tgt.ECall(method, IList(new_args))
-            # we did not find the called object in the methods, so we look in the fields to check if we have a Callable with name here
             elif name in field_ids:
                 i = 0
                 for field_name in field_ids:
                     if field_name == name:
                         break
                     i += 1
-                # here we need to access the member variable in the tuple of the object (NOT the class object) and call the ELambda there
                 # (index + 1) as first obj in tuple is class obj
-                callable_member = tgt.ETupleAccess(shrink_expr(expr), i + 1)
+                callable_member = tgt.ETupleAccess(shrink_expr(expr, dict_vars), i + 1)
                 new_args = []
                 for arg in args:
-                    new_args.append(shrink_expr(arg))
+                    new_args.append(shrink_expr(arg, dict_vars))
                 return tgt.ECall(callable_member, IList(new_args))
-            # could not find it anywhere - can not generate code
             else:
                 raise Exception(f"could not find called method {name}")
