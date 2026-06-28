@@ -33,7 +33,8 @@ class EVar:
 
 type Expr = ExprAtom | EOp1 | EOp2Arith | EOp2Comp | EInput \
           | ETupleAccess | ETupleLen | EAllocate | EGlobal \
-          | ECall | EFunRef
+          | ECall | EFunRef \
+          | EDict | EDictAccess
 
 @dataclass(frozen=True)
 class EOp1:
@@ -84,9 +85,18 @@ class ECall:
 class EFunRef:
     fun: Label
 
+@dataclass(frozen=True)
+class EDict:
+    items: IList[tuple['ExprAtom', 'ExprAtom']]
+
+@dataclass(frozen=True)
+class EDictAccess:
+    e: ExprAtom
+    key: ExprAtom
+
 # Left-hand sides of Assign Statements
 
-type Lhs = LId | LSubscript
+type Lhs = LId | LSubscript | LDictSet
 
 @dataclass
 class LId:
@@ -96,6 +106,11 @@ class LId:
 class LSubscript:
     e: ExprAtom
     offset: int
+
+@dataclass
+class LDictSet:
+    e: ExprAtom
+    key: ExprAtom
 
 # Statements
 
@@ -216,6 +231,8 @@ def pretty_lhs(lhs: Lhs) -> str:
             return str(x)
         case LSubscript(e, i):
             return f"{pretty_expr(e)}[{i}]"
+        case LDictSet(e, key):
+            return f"{pretty_expr(e)}[{pretty_expr(key)}]"
 
 def pretty_expr(e: Expr) -> str:
     match e:
@@ -246,3 +263,8 @@ def pretty_expr(e: Expr) -> str:
             return f"{pretty_expr(func)}({args_str})"
         case EFunRef(name):
             return f"{name}"
+        case EDict(items):
+            pairs = ", ".join(f"{pretty_expr(k)}: {pretty_expr(v)}" for k, v in items)
+            return "{" + pairs + "}"
+        case EDictAccess(e, key):
+            return f"{pretty_expr(e)}[{pretty_expr(key)}]"

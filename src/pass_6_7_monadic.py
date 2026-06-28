@@ -60,6 +60,14 @@ def monadic_lhs(l: src.Lhs) -> tuple[IList[tgt.Stmt], tgt.Lhs]:
         case src.LSubscript(e, i):
             p, e_out = monadic_atom(e)
             return p, tgt.LSubscript(e_out, i)
+        case src.LDictSet(e, key):
+            p_e, e_out = monadic_atom(e)
+            p_key, key_out = monadic_atom(key)
+            return p_e + p_key, tgt.LDictSet(e_out, key_out)
+        case src.LDictSet(e, key):
+            p_e, e_out = monadic_atom(e)
+            p_key, key_out = monadic_atom(key)
+            return p_e + p_key, tgt.LDictSet(e_out, key_out)
 
 def monadic_atom(e: src.Expr) -> tuple[IList[tgt.Stmt], tgt.ExprAtom]:
     p, e_out = monadic_expr(e)
@@ -132,6 +140,19 @@ def monadic_expr(e: src.Expr) -> tuple[IList[tgt.Stmt], tgt.Expr]:
             return p_e_func + p_args, tgt.ECall(e_func_out, e_args_out)
         case src.EFunRef(name):
             return ilist(), tgt.EFunRef(name)
+        case src.EDict(items):
+            p_all = ilist()
+            items_out = []
+            for k, v in items:
+                p_k, k_out = monadic_atom(k)
+                p_v, v_out = monadic_atom(v)
+                p_all += p_k + p_v
+                items_out.append((k_out, v_out))
+            return p_all, tgt.EDict(IList(items_out))
+        case src.EDictAccess(e, key):
+            p_e, e_out = monadic_atom(e)
+            p_key, key_out = monadic_atom(key)
+            return p_e + p_key, tgt.EDictAccess(e_out, key_out)
 
 def monadic_condition(e: src.Expr) -> tuple[IList[tgt.Stmt], tgt.EOp2Comp]:
     match e:
