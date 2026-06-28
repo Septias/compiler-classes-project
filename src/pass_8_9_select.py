@@ -38,6 +38,36 @@ def select_stmt(end_label: Label, s: src.Stmt) -> IList[tgt.Instr]:
                 tgt.Instr2('div', a0, a0, t0),
                 tgt.Call(Label("print_int64"), 1, 'normal'),
             )
+        case src.SAssign(src.LDictSet(e_dict, e_key), src.EVar(_) | src.EConst(_, _) as e_val):
+            return ilist(
+                tgt.Move(a0, select_atom(e_dict)),
+                tgt.Move(a1, select_atom(e_key)),
+                tgt.Move(a2, select_atom(e_val)),
+                tgt.Call(Label("dict_set"), 3, 'normal'),
+            )
+        case src.SAssign(lhs, src.EDict(items)):
+            lhs_out = select_lhs(lhs)
+            instrs = ilist(
+                tgt.Move(a0, tgt.Const(16, '64bit')),
+                tgt.Call(Label("dict_create"), 1, 'normal'),
+                tgt.Move(lhs_out, a0),
+            )
+            for k, v in items:
+                instrs += ilist(
+                    tgt.Move(a0, lhs_out),
+                    tgt.Move(a1, select_atom(k)),
+                    tgt.Move(a2, select_atom(v)),
+                    tgt.Call(Label("dict_set"), 3, 'normal'),
+                )
+            return instrs
+        case src.SAssign(lhs, src.EDictAccess(e_dict, e_key)):
+            lhs_out = select_lhs(lhs)
+            return ilist(
+                tgt.Move(a0, select_atom(e_dict)),
+                tgt.Move(a1, select_atom(e_key)),
+                tgt.Call(Label("dict_get"), 2, 'normal'),
+                tgt.Move(lhs_out, a0),
+            )
         case src.SAssign(lhs, src.EInput()):
             lhs_out = select_lhs(lhs)
             return ilist(
